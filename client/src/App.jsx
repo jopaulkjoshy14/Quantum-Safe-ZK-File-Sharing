@@ -72,24 +72,32 @@ function App() {
     useState(null);
 
   /*
+ * Check backend availability.
+ */
+useEffect(() => {
+  fetch(`${API_BASE_URL}/health`)
+    .then(async (response) => {
+      if (!response.ok) {
+        throw new Error(
+          "Backend returned an error."
+        );
+      }
+
+      return response.json();
+    })
+    .then((data) => {
+      setStatus(data.message);
+    })
+    .catch((err) => {
+      setError(err.message);
+      setStatus("Backend unavailable");
+    });
+}, []);
+
+  /*
    * Check backend availability.
    */
   useEffect(() => {
-
-  runFileCryptoSelfTest()
-  .then((result) => {
-    console.log(
-      "File Crypto test result:",
-      result
-    );
-  })
-  .catch((error) => {
-    console.error(
-      "File Crypto self-test FAILED:",
-      error
-    );
-  });
-    
     fetch(`${API_BASE_URL}/health`)
       .then(async (response) => {
         if (!response.ok) {
