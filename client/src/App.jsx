@@ -72,25 +72,27 @@ function App() {
     useState(null);
 
   /*
- * Check backend availability.
+ * Temporary File Crypto self-test.
+ *
+ * This runs entirely inside the browser.
  */
 useEffect(() => {
-  fetch(`${API_BASE_URL}/health`)
-    .then(async (response) => {
-      if (!response.ok) {
-        throw new Error(
-          "Backend returned an error."
-        );
-      }
+  console.log(
+    "Starting File Crypto self-test..."
+  );
 
-      return response.json();
+  runFileCryptoSelfTest()
+    .then((result) => {
+      console.log(
+        "File Crypto test result:",
+        result
+      );
     })
-    .then((data) => {
-      setStatus(data.message);
-    })
-    .catch((err) => {
-      setError(err.message);
-      setStatus("Backend unavailable");
+    .catch((error) => {
+      console.error(
+        "File Crypto self-test FAILED:",
+        error
+      );
     });
 }, []);
 
