@@ -5,9 +5,16 @@ export async function register(req, res) {
     const {
       username,
       password,
+
+      // Client-side KDF parameters used to protect
+      // the Master Key.
+      passwordKdfSalt,
+      passwordKdfParams,
+
       wrappedMasterKey,
       masterKeyIV,
       masterKeyVersion,
+
       mlKemPublicKey,
       wrappedMlKemPrivateKey,
       privateKeyIV,
@@ -16,9 +23,16 @@ export async function register(req, res) {
     const result = await registerUser({
       username,
       password,
+
+      // Preserve the exact KDF parameters generated
+      // by the browser.
+      passwordKdfSalt,
+      passwordKdfParams,
+
       wrappedMasterKey,
       masterKeyIV,
       masterKeyVersion,
+
       mlKemPublicKey,
       wrappedMlKemPrivateKey,
       privateKeyIV,
