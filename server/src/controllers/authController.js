@@ -1,4 +1,7 @@
-import { registerUser } from "../services/authService.js";
+import {
+  registerUser,
+  loginUser,
+} from "../services/authService.js";
 
 export async function register(req, res) {
   try {
@@ -52,6 +55,55 @@ export async function register(req, res) {
     return res.status(400).json({
       ok: false,
       message: error.message || "Registration failed.",
+    });
+  }
+}
+
+export async function login(req, res) {
+  try {
+    const {
+      username,
+      password,
+    } = req.body;
+
+    const result = await loginUser({
+      username,
+      password,
+    });
+
+    return res.status(200).json({
+      ok: true,
+      message: "Login successful.",
+
+      /*
+       * These values are protected cryptographic material.
+       *
+       * The browser will use them to recover the Master Key
+       * locally. The server does not decrypt them.
+       */
+      user: {
+        id: result.userId,
+        username: result.username,
+
+        passwordKdfSalt: result.passwordKdfSalt,
+        passwordKdfParams: result.passwordKdfParams,
+
+        wrappedMasterKey: result.wrappedMasterKey,
+        masterKeyIV: result.masterKeyIV,
+        masterKeyVersion: result.masterKeyVersion,
+
+        mlKemPublicKey: result.mlKemPublicKey,
+        wrappedMlKemPrivateKey:
+          result.wrappedMlKemPrivateKey,
+        privateKeyIV: result.privateKeyIV,
+      },
+    });
+  } catch (error) {
+    console.error("Login error:", error);
+
+    return res.status(401).json({
+      ok: false,
+      message: error.message || "Login failed.",
     });
   }
 }
