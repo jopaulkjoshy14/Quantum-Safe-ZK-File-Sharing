@@ -7,7 +7,7 @@ import {
 const PASSWORD_HASH_ITERATIONS = 310000;
 const PASSWORD_HASH_KEY_LENGTH = 32;
 const PASSWORD_HASH_DIGEST = "sha256";
-const PASSWORD_SALT_LENGTH = 16;
+const PASSWORD_HASH_SALT_LENGTH = 16;
 
 function normalizeUsername(username) {
   return username.trim().toLowerCase();
@@ -47,9 +47,31 @@ function validatePassword(password) {
   }
 }
 
+function validateClientKdfParameters(passwordKdfSalt, passwordKdfParams) {
+  if (typeof passwordKdfSalt !== "string" || passwordKdfSalt.length === 0) {
+    throw new Error("Client password KDF salt is required.");
+  }
+
+  if (!passwordKdfParams || typeof passwordKdfParams !== "object") {
+    throw new Error("Client password KDF parameters are required.");
+  }
+
+  if (passwordKdfParams.algorithm !== "PBKDF2-HMAC-SHA-256") {
+    throw new Error("Unsupported client password KDF algorithm.");
+  }
+
+  if (passwordKdfParams.iterations !== 310000) {
+    throw new Error("Invalid client password KDF iteration count.");
+  }
+
+  if (passwordKdfParams.keyLength !== 256) {
+    throw new Error("Invalid client password KDF key length.");
+  }
+}
+
 function hashPassword(password) {
   return new Promise((resolve, reject) => {
-    const salt = crypto.randomBytes(PASSWORD_SALT_LENGTH);
+    const salt = crypto.randomBytes(PASSWORD_HASH_SALT_LENGTH);
 
     crypto.pbkdf2(
       password,
@@ -65,8 +87,10 @@ function hashPassword(password) {
 
         resolve({
           passwordHash: hash.toString("base64"),
-          passwordKdfSalt: salt.toString("base64"),
-          passwordKdfParams: {
+
+          passwordHashSalt: salt.toString("base64"),
+
+          passwordHashKdfParams: {
             algorithm: "PBKDF2-HMAC-SHA-256",
             iterations: PASSWORD_HASH_ITERATIONS,
             keyLength: PASSWORD_HASH_KEY_LENGTH,
@@ -80,9 +104,17 @@ function hashPassword(password) {
 export async function registerUser({
   username,
   password,
+
+  // Client-side KDF parameters.
+  // These MUST be the exact parameters used by the browser
+  // to derive the KEK that protects the Master Key.
+  passwordKdfSalt,
+  passwordKdfParams,
+
   wrappedMasterKey,
   masterKeyIV,
   masterKeyVersion,
+
   mlKemPublicKey,
   wrappedMlKemPrivateKey,
   privateKeyIV,
@@ -90,6 +122,11 @@ export async function registerUser({
   const normalizedUsername = validateUsername(username);
 
   validatePassword(password);
+
+  validateClientKdfParameters(
+    passwordKdfSalt,
+    passwordKdfParams
+  );
 
   if (!wrappedMasterKey || !masterKeyIV) {
     throw new Error("Protected Master Key data is required.");
@@ -109,23 +146,35 @@ export async function registerUser({
     throw new Error("Username is already registered.");
   }
 
+  /*
+   * Generate a SEPARATE server-side password hash.
+   *
+   * This salt is unrelated to the client-side passwordKdfSalt.
+   */
   const {
     passwordHash,
-    passwordKdfSalt,
-    passwordKdfParams,
+    passwordHashSalt,
+    passwordHashKdfParams,
   } = await hashPassword(password);
 
   const userDocument = createUserDocument({
     username: normalizedUsername,
 
+    // Server authentication
     passwordHash,
+    passwordHashSalt,
+    passwordHashKdfParams,
+
+    // Client-side Master Key protection
     passwordKdfSalt,
     passwordKdfParams,
 
+    // Protected Master Key
     wrappedMasterKey,
     masterKeyIV,
     masterKeyVersion,
 
+    // ML-KEM-768
     mlKemPublicKey,
     wrappedMlKemPrivateKey,
     privateKeyIV,
