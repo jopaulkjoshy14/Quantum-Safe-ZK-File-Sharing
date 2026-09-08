@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { runRegistrationCryptoSelfTest } from "./crypto/testRegistrationCrypto.js";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
@@ -31,6 +32,22 @@ function App() {
         setStatus("Backend unavailable");
       });
   }, []);
+
+  useEffect(() => {
+  runRegistrationCryptoSelfTest()
+    .then((result) => {
+      console.log(
+        "Registration crypto test result:",
+        result
+      );
+    })
+    .catch((error) => {
+      console.error(
+        "Registration crypto test FAILED:",
+        error
+      );
+    });
+}, []);
 
   async function handleRegister(event) {
     event.preventDefault();
