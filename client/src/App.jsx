@@ -4,6 +4,23 @@ import { prepareRegistrationCrypto } from "./crypto/registrationCrypto.js";
 
 import { recoverLoginKeys } from "./crypto/loginCrypto.js";
 
+import {
+  runFileCryptoSelfTest,
+} from "./crypto/testFileCrypto.js";
+runFileCryptoSelfTest()
+  .then((result) => {
+    console.log(
+      "File Crypto test result:",
+      result
+    );
+  })
+  .catch((error) => {
+    console.error(
+      "File Crypto self-test FAILED:",
+      error
+    );
+  });
+
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   "http://localhost:5000/api";
