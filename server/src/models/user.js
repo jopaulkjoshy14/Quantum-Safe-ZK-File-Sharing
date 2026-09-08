@@ -6,6 +6,18 @@ export function getUsersCollection() {
   return getDatabase().collection(USERS_COLLECTION);
 }
 
+export async function ensureUserIndexes() {
+  const users = getUsersCollection();
+
+  await users.createIndex(
+    { username: 1 },
+    {
+      unique: true,
+      name: "username_unique",
+    }
+  );
+}
+
 export function createUserDocument({
   username,
   passwordHash,
