@@ -7,19 +7,6 @@ import { recoverLoginKeys } from "./crypto/loginCrypto.js";
 import {
   runFileCryptoSelfTest,
 } from "./crypto/testFileCrypto.js";
-runFileCryptoSelfTest()
-  .then((result) => {
-    console.log(
-      "File Crypto test result:",
-      result
-    );
-  })
-  .catch((error) => {
-    console.error(
-      "File Crypto self-test FAILED:",
-      error
-    );
-  });
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
@@ -88,6 +75,21 @@ function App() {
    * Check backend availability.
    */
   useEffect(() => {
+
+  runFileCryptoSelfTest()
+  .then((result) => {
+    console.log(
+      "File Crypto test result:",
+      result
+    );
+  })
+  .catch((error) => {
+    console.error(
+      "File Crypto self-test FAILED:",
+      error
+    );
+  });
+    
     fetch(`${API_BASE_URL}/health`)
       .then(async (response) => {
         if (!response.ok) {
