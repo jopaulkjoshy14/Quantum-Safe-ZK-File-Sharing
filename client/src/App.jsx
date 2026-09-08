@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { runRegistrationCryptoSelfTest } from "./crypto/testRegistrationCrypto.js";
+import { prepareRegistrationCrypto } from "./crypto/registrationCrypto.js";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
@@ -33,22 +33,6 @@ function App() {
       });
   }, []);
 
-  useEffect(() => {
-  runRegistrationCryptoSelfTest()
-    .then((result) => {
-      console.log(
-        "Registration crypto test result:",
-        result
-      );
-    })
-    .catch((error) => {
-      console.error(
-        "Registration crypto test FAILED:",
-        error
-      );
-    });
-}, []);
-
   async function handleRegister(event) {
     event.preventDefault();
 
@@ -57,6 +41,37 @@ function App() {
     setIsRegistering(true);
 
     try {
+      /*
+       * ------------------------------------------------------------
+       * Generate all cryptographic registration material
+       * inside the browser.
+       *
+       * This performs:
+       *
+       * Password
+       *   ↓
+       * PBKDF2-HMAC-SHA-256
+       *   ↓
+       * KEK
+       *   ↓
+       * Wrapped Master Key
+       *
+       * Random Master Key
+       *   ↓
+       * Protect ML-KEM Secret Key
+       *
+       * ML-KEM-768
+       *   ├── Public Key
+       *   └── Protected Secret Key
+       *
+       * Plaintext keys remain in browser memory and are NOT
+       * included in the returned registration object.
+       * ------------------------------------------------------------
+       */
+      const cryptoMaterial = await prepareRegistrationCrypto(
+        password
+      );
+
       const response = await fetch(`${API_BASE_URL}/auth/register`, {
         method: "POST",
         headers: {
@@ -66,22 +81,16 @@ function App() {
           username,
           password,
 
-          // Temporary test values.
-          // These will be replaced by real client-side cryptography.
-          wrappedMasterKey: "TEST_WRAPPED_MASTER_KEY",
-          masterKeyIV: "TEST_MASTER_KEY_IV",
-          masterKeyVersion: 1,
-
-          mlKemPublicKey: "TEST_PUBLIC_KEY",
-          wrappedMlKemPrivateKey: "TEST_WRAPPED_PRIVATE_KEY",
-          privateKeyIV: "TEST_PRIVATE_KEY_IV",
+          ...cryptoMaterial,
         }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || "Registration failed.");
+        throw new Error(
+          data.message || "Registration failed."
+        );
       }
 
       setRegisterStatus(
@@ -91,7 +100,10 @@ function App() {
       setUsername("");
       setPassword("");
     } catch (err) {
-      setRegisterError(err.message);
+      console.error("Registration failed:", err);
+      setRegisterError(
+        err.message || "Registration failed."
+      );
     } finally {
       setIsRegistering(false);
     }
@@ -112,8 +124,8 @@ function App() {
               </h1>
 
               <p className="text-secondary">
-                Client-side encrypted file sharing with AES-256-GCM and
-                ML-KEM-768 key establishment.
+                Client-side encrypted file sharing with AES-256-GCM
+                and ML-KEM-768 key establishment.
               </p>
 
               <hr />
@@ -122,7 +134,9 @@ function App() {
 
               <div
                 className={`alert ${
-                  error ? "alert-danger" : "alert-success"
+                  error
+                    ? "alert-danger"
+                    : "alert-success"
                 }`}
               >
                 {status}
@@ -130,11 +144,16 @@ function App() {
 
               <hr />
 
-              <h2 className="h5 mb-3">Create Account</h2>
+              <h2 className="h5 mb-3">
+                Create Account
+              </h2>
 
               <form onSubmit={handleRegister}>
                 <div className="mb-3">
-                  <label htmlFor="username" className="form-label">
+                  <label
+                    htmlFor="username"
+                    className="form-label"
+                  >
                     Username
                   </label>
 
@@ -143,7 +162,9 @@ function App() {
                     type="text"
                     className="form-control"
                     value={username}
-                    onChange={(event) => setUsername(event.target.value)}
+                    onChange={(event) =>
+                      setUsername(event.target.value)
+                    }
                     placeholder="Enter username"
                     autoComplete="username"
                     required
@@ -153,7 +174,10 @@ function App() {
                 </div>
 
                 <div className="mb-3">
-                  <label htmlFor="password" className="form-label">
+                  <label
+                    htmlFor="password"
+                    className="form-label"
+                  >
                     Password
                   </label>
 
@@ -162,7 +186,9 @@ function App() {
                     type="password"
                     className="form-control"
                     value={password}
-                    onChange={(event) => setPassword(event.target.value)}
+                    onChange={(event) =>
+                      setPassword(event.target.value)
+                    }
                     placeholder="Enter password"
                     autoComplete="new-password"
                     required
@@ -188,22 +214,22 @@ function App() {
                   className="btn btn-dark w-100"
                   disabled={isRegistering}
                 >
-                  {isRegistering ? "Creating account..." : "Create Account"}
+                  {isRegistering
+                    ? "Creating secure account..."
+                    : "Create Account"}
                 </button>
               </form>
 
               <p className="small text-secondary mt-3 mb-0">
-                Development test only: cryptographic key material is currently
-                represented by placeholders. Real browser-side cryptography
-                will be implemented in the next phase.
+                Your cryptographic keys are generated and protected
+                in the browser before protected key material is sent
+                to the server.
               </p>
 
               <hr />
 
               <p className="small text-secondary mb-0">
-                Current stage: authentication foundation. Cryptographic
-                functionality will be implemented incrementally according to
-                Frozen V1.
+                Current stage: secure cryptographic registration.
               </p>
             </div>
           </div>
