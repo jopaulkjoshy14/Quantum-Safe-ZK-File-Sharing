@@ -47,31 +47,49 @@ function validatePassword(password) {
   }
 }
 
-function validateClientKdfParameters(passwordKdfSalt, passwordKdfParams) {
-  if (typeof passwordKdfSalt !== "string" || passwordKdfSalt.length === 0) {
+function validateClientKdfParameters(
+  passwordKdfSalt,
+  passwordKdfParams
+) {
+  if (
+    typeof passwordKdfSalt !== "string" ||
+    passwordKdfSalt.length === 0
+  ) {
     throw new Error("Client password KDF salt is required.");
   }
 
-  if (!passwordKdfParams || typeof passwordKdfParams !== "object") {
+  if (
+    !passwordKdfParams ||
+    typeof passwordKdfParams !== "object"
+  ) {
     throw new Error("Client password KDF parameters are required.");
   }
 
-  if (passwordKdfParams.algorithm !== "PBKDF2-HMAC-SHA-256") {
+  if (
+    passwordKdfParams.algorithm !==
+    "PBKDF2-HMAC-SHA-256"
+  ) {
     throw new Error("Unsupported client password KDF algorithm.");
   }
 
   if (passwordKdfParams.iterations !== 310000) {
-    throw new Error("Invalid client password KDF iteration count.");
+    throw new Error(
+      "Invalid client password KDF iteration count."
+    );
   }
 
   if (passwordKdfParams.keyLength !== 256) {
-    throw new Error("Invalid client password KDF key length.");
+    throw new Error(
+      "Invalid client password KDF key length."
+    );
   }
 }
 
 function hashPassword(password) {
   return new Promise((resolve, reject) => {
-    const salt = crypto.randomBytes(PASSWORD_HASH_SALT_LENGTH);
+    const salt = crypto.randomBytes(
+      PASSWORD_HASH_SALT_LENGTH
+    );
 
     crypto.pbkdf2(
       password,
@@ -101,6 +119,62 @@ function hashPassword(password) {
   });
 }
 
+function verifyPassword(password, storedHash, storedSalt, params) {
+  return new Promise((resolve, reject) => {
+    if (
+      params?.algorithm !== "PBKDF2-HMAC-SHA-256" ||
+      params?.iterations !== PASSWORD_HASH_ITERATIONS ||
+      params?.keyLength !== PASSWORD_HASH_KEY_LENGTH
+    ) {
+      reject(
+        new Error(
+          "Unsupported stored password hashing parameters."
+        )
+      );
+      return;
+    }
+
+    let expectedHash;
+    let salt;
+
+    try {
+      expectedHash = Buffer.from(storedHash, "base64");
+      salt = Buffer.from(storedSalt, "base64");
+    } catch {
+      reject(new Error("Invalid stored password hash data."));
+      return;
+    }
+
+    crypto.pbkdf2(
+      password,
+      salt,
+      params.iterations,
+      params.keyLength,
+      PASSWORD_HASH_DIGEST,
+      (error, derivedHash) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        if (
+          expectedHash.length !== derivedHash.length
+        ) {
+          resolve(false);
+          return;
+        }
+
+        resolve(
+          crypto.timingSafeEqual(
+            expectedHash,
+            derivedHash
+          )
+        );
+      }
+    );
+  });
+}
+
 export async function registerUser({
   username,
   password,
@@ -119,7 +193,8 @@ export async function registerUser({
   wrappedMlKemPrivateKey,
   privateKeyIV,
 }) {
-  const normalizedUsername = validateUsername(username);
+  const normalizedUsername =
+    validateUsername(username);
 
   validatePassword(password);
 
@@ -129,11 +204,19 @@ export async function registerUser({
   );
 
   if (!wrappedMasterKey || !masterKeyIV) {
-    throw new Error("Protected Master Key data is required.");
+    throw new Error(
+      "Protected Master Key data is required."
+    );
   }
 
-  if (!mlKemPublicKey || !wrappedMlKemPrivateKey || !privateKeyIV) {
-    throw new Error("Protected ML-KEM key data is required.");
+  if (
+    !mlKemPublicKey ||
+    !wrappedMlKemPrivateKey ||
+    !privateKeyIV
+  ) {
+    throw new Error(
+      "Protected ML-KEM key data is required."
+    );
   }
 
   const users = getUsersCollection();
@@ -143,13 +226,16 @@ export async function registerUser({
   });
 
   if (existingUser) {
-    throw new Error("Username is already registered.");
+    throw new Error(
+      "Username is already registered."
+    );
   }
 
   /*
    * Generate a SEPARATE server-side password hash.
    *
-   * This salt is unrelated to the client-side passwordKdfSalt.
+   * This salt is unrelated to the client-side
+   * passwordKdfSalt.
    */
   const {
     passwordHash,
@@ -180,10 +266,80 @@ export async function registerUser({
     privateKeyIV,
   });
 
-  const result = await users.insertOne(userDocument);
+  const result = await users.insertOne(
+    userDocument
+  );
 
   return {
     userId: result.insertedId,
     username: normalizedUsername,
+  };
+}
+
+/**
+ * Authenticate an existing user.
+ *
+ * IMPORTANT:
+ * The server verifies the password but NEVER derives
+ * or receives the user's Master Key.
+ *
+ * After successful authentication, the browser receives
+ * the protected cryptographic material required to recover
+ * the Master Key locally.
+ */
+export async function loginUser({
+  username,
+  password,
+}) {
+  const normalizedUsername =
+    validateUsername(username);
+
+  validatePassword(password);
+
+  const users = getUsersCollection();
+
+  const user = await users.findOne({
+    username: normalizedUsername,
+  });
+
+  if (!user) {
+    throw new Error("Invalid username or password.");
+  }
+
+  const passwordValid = await verifyPassword(
+    password,
+    user.passwordHash,
+    user.passwordHashSalt,
+    user.passwordHashKdfParams
+  );
+
+  if (!passwordValid) {
+    throw new Error("Invalid username or password.");
+  }
+
+  /*
+   * Return only information the browser needs.
+   *
+   * No plaintext password, Master Key, ML-KEM secret key,
+   * or derived KEK is returned or generated by the server.
+   */
+  return {
+    userId: user._id,
+    username: user.username,
+
+    // Browser uses these to derive the KEK.
+    passwordKdfSalt: user.passwordKdfSalt,
+    passwordKdfParams: user.passwordKdfParams,
+
+    // Browser unwraps the Master Key locally.
+    wrappedMasterKey: user.wrappedMasterKey,
+    masterKeyIV: user.masterKeyIV,
+    masterKeyVersion: user.masterKeyVersion,
+
+    // Browser unwraps the ML-KEM secret key locally.
+    mlKemPublicKey: user.mlKemPublicKey,
+    wrappedMlKemPrivateKey:
+      user.wrappedMlKemPrivateKey,
+    privateKeyIV: user.privateKeyIV,
   };
 }
