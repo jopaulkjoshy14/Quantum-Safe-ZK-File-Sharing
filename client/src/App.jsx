@@ -81,8 +81,6 @@ function App() {
    * Runtime-only cryptographic state
    * ----------------------------------------------------
    *
-   * IMPORTANT:
-   *
    * These values are deliberately NOT stored in:
    * - localStorage
    * - sessionStorage
@@ -133,11 +131,32 @@ function App() {
   ] = useState(null);
 
   /*
+   * ----------------------------------------------------
+   * Encrypted file listing state
+   * ----------------------------------------------------
+   */
+  const [
+    fileList,
+    setFileList,
+  ] = useState([]);
+
+  const [
+    fileListStatus,
+    setFileListStatus,
+  ] = useState("");
+
+  const [
+    fileListError,
+    setFileListError,
+  ] = useState("");
+
+  const [
+    isLoadingFiles,
+    setIsLoadingFiles,
+  ] = useState(false);
+
+  /*
    * Maximum plaintext file size for V1.
-   *
-   * The backend allows approximately 100 MB of
-   * encrypted data. The encrypted file also contains
-   * the AES-GCM authentication tag.
    */
   const MAX_FILE_SIZE =
     100 * 1024 * 1024;
@@ -255,6 +274,99 @@ function App() {
 
   /*
    * ----------------------------------------------------
+   * List encrypted files
+   * ----------------------------------------------------
+   *
+   * IMPORTANT:
+   *
+   * The backend returns only file references.
+   *
+   * Plaintext filename, type and size remain
+   * inside encryptedMetadata.
+   *
+   * Those values will be decrypted locally
+   * in the next stage.
+   */
+  async function loadFileList(
+    ownerId
+  ) {
+    if (
+      typeof ownerId !== "string" ||
+      ownerId.length === 0
+    ) {
+      return;
+    }
+
+    setFileListStatus(
+      "Loading encrypted files..."
+    );
+
+    setFileListError("");
+    setIsLoadingFiles(true);
+
+    try {
+      const response =
+        await fetch(
+          `${API_BASE_URL}/files?ownerId=${encodeURIComponent(
+            ownerId
+          )}`
+        );
+
+      let data;
+
+      try {
+        data =
+          await response.json();
+      } catch {
+        throw new Error(
+          "The server returned an invalid response."
+        );
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            "Unable to load encrypted files."
+        );
+      }
+
+      const files =
+        Array.isArray(data.files)
+          ? data.files
+          : [];
+
+      setFileList(files);
+
+      setFileListStatus(
+        files.length > 0
+          ? `${files.length} encrypted file${
+              files.length === 1
+                ? ""
+                : "s"
+            } found.`
+          : "No encrypted files found."
+      );
+    } catch (err) {
+      console.error(
+        "Failed to load encrypted files:",
+        err
+      );
+
+      setFileList([]);
+
+      setFileListStatus("");
+
+      setFileListError(
+        err.message ||
+          "Unable to load encrypted files."
+      );
+    } finally {
+      setIsLoadingFiles(false);
+    }
+  }
+
+  /*
+   * ----------------------------------------------------
    * Login
    * ----------------------------------------------------
    */
@@ -279,6 +391,13 @@ function App() {
     setUploadStatus("");
     setUploadError("");
     setUploadResult(null);
+
+    /*
+     * Clear previous file listing.
+     */
+    setFileList([]);
+    setFileListStatus("");
+    setFileListError("");
 
     try {
       /*
@@ -358,7 +477,7 @@ function App() {
         recoveredKeys
       );
 
-      setCurrentUser({
+      const loggedInUser = {
         id: data.user.id,
 
         username:
@@ -371,7 +490,11 @@ function App() {
          */
         mlKemPublicKey:
           data.user.mlKemPublicKey,
-      });
+      };
+
+      setCurrentUser(
+        loggedInUser
+      );
 
       setLoginStatus(
         "Login successful. Cryptographic keys recovered locally."
@@ -383,6 +506,15 @@ function App() {
        * recovery.
        */
       setLoginPassword("");
+
+      /*
+       * Load Alice's encrypted file references.
+       *
+       * This does NOT decrypt anything.
+       */
+      await loadFileList(
+        loggedInUser.id
+      );
     } catch (err) {
       console.error(
         "Login failed:",
@@ -483,8 +615,10 @@ function App() {
     }
 
     if (
-      !(runtimeKeys.masterKey instanceof
-        Uint8Array)
+      !(
+        runtimeKeys.masterKey instanceof
+        Uint8Array
+      )
     ) {
       setUploadError(
         "Master Key is unavailable."
@@ -562,6 +696,13 @@ function App() {
       if (input) {
         input.value = "";
       }
+
+      /*
+       * Refresh encrypted file list.
+       */
+      await loadFileList(
+        currentUser.id
+      );
     } catch (err) {
       console.error(
         "Encrypted file upload failed:",
@@ -600,6 +741,13 @@ function App() {
     setUploadStatus("");
     setUploadError("");
     setUploadResult(null);
+
+    /*
+     * Clear file listing.
+     */
+    setFileList([]);
+    setFileListStatus("");
+    setFileListError("");
 
     /*
      * Reset file input if present.
@@ -964,7 +1112,7 @@ function App() {
                   )}
 
                   {/* Encrypted File Upload */}
-                  <div className="card border-primary">
+                  <div className="card border-primary mb-4">
                     <div className="card-body">
                       <h2 className="h5">
                         Secure File Upload
@@ -1139,14 +1287,162 @@ function App() {
                       )}
                     </div>
                   </div>
+
+                  {/* Encrypted File List */}
+                  <div className="card border-success">
+                    <div className="card-body">
+                      <div className="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                          <h2 className="h5 mb-1">
+                            Your Encrypted Files
+                          </h2>
+
+                          <p className="text-secondary small mb-0">
+                            File references are
+                            retrieved from the
+                            server. Sensitive
+                            metadata remains
+                            encrypted.
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="btn btn-outline-secondary btn-sm"
+                          onClick={() =>
+                            loadFileList(
+                              currentUser.id
+                            )
+                          }
+                          disabled={
+                            isLoadingFiles
+                          }
+                        >
+                          {isLoadingFiles
+                            ? "Refreshing..."
+                            : "Refresh"}
+                        </button>
+                      </div>
+
+                      {fileListError && (
+                        <div className="alert alert-danger small">
+                          {fileListError}
+                        </div>
+                      )}
+
+                      {fileListStatus && (
+                        <div className="alert alert-info small">
+                          {fileListStatus}
+                        </div>
+                      )}
+
+                      {isLoadingFiles &&
+                        fileList.length ===
+                          0 && (
+                          <div className="text-center py-3">
+                            <div
+                              className="spinner-border spinner-border-sm"
+                              role="status"
+                              aria-hidden="true"
+                            />
+                            <span className="ms-2 small">
+                              Loading encrypted
+                              files...
+                            </span>
+                          </div>
+                        )}
+
+                      {!isLoadingFiles &&
+                        fileList.length ===
+                          0 &&
+                        !fileListError && (
+                          <div className="text-center text-secondary py-4">
+                            <p className="mb-1">
+                              No encrypted files
+                              found.
+                            </p>
+
+                            <p className="small mb-0">
+                              Upload a file above
+                              to create your first
+                              encrypted file.
+                            </p>
+                          </div>
+                        )}
+
+                      {fileList.length > 0 && (
+                        <div className="list-group">
+                          {fileList.map(
+                            (file) => (
+                              <div
+                                key={String(
+                                  file.id
+                                )}
+                                className="list-group-item"
+                              >
+                                <div className="d-flex justify-content-between align-items-start">
+                                  <div>
+                                    <div className="fw-semibold">
+                                      Encrypted
+                                      File
+                                    </div>
+
+                                    <div className="small text-secondary">
+                                      File ID:{" "}
+                                      <code>
+                                        {String(
+                                          file.id
+                                        )}
+                                      </code>
+                                    </div>
+
+                                    <div className="small text-secondary">
+                                      Version:{" "}
+                                      {
+                                        file.keyVersion
+                                      }
+                                    </div>
+
+                                    {file.createdAt && (
+                                      <div className="small text-secondary">
+                                        Uploaded:{" "}
+                                        {new Date(
+                                          file.createdAt
+                                        ).toLocaleString()}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <span className="badge text-bg-success">
+                                    Encrypted
+                                  </span>
+                                </div>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      )}
+
+                      <div className="alert alert-secondary small mt-3 mb-0">
+                        <strong>Privacy:</strong>{" "}
+                        The server does not receive
+                        the plaintext filename,
+                        MIME type, or original file
+                        contents. These will be
+                        recovered from encrypted
+                        metadata inside the browser.
+                      </div>
+                    </div>
+                  </div>
                 </>
               )}
 
               <hr />
 
               <p className="small text-secondary mb-0">
-                Current stage: browser-side file
-                encryption and encrypted storage.
+                Current stage: encrypted file
+                listing and browser-side encrypted
+                storage.
               </p>
 
             </div>
