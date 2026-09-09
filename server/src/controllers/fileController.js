@@ -6,6 +6,7 @@ import {
   createFileDocument,
   insertFile,
   findFileByIdForOwner,
+  findFilesByOwner,
 } from "../models/file.js";
 
 /**
@@ -109,53 +110,14 @@ export async function uploadFile(
   try {
     const {
       ownerId,
-
-      /*
-       * AES-256-GCM encrypted file.
-       */
       encryptedData,
-
-      /*
-       * IV used for file encryption.
-       */
       fileIV,
-
-      /*
-       * Encrypted metadata.
-       */
       encryptedMetadata,
       metadataIV,
-
-      /*
-       * Metadata Key protected by the
-       * Master-Key-derived wrapping key.
-       */
       wrappedMetadataKey,
-
-      /*
-       * IV used to wrap the Metadata Key.
-       */
       metadataKeyIV,
-
-      /*
-       * Owner FEK protected using:
-       *
-       * Master Key
-       *     ↓
-       * HKDF
-       *     ↓
-       * Owner FEK-Wrapping Key
-       *     ↓
-       * AES-GCM
-       *     ↓
-       * wrappedOwnerFEK
-       */
       wrappedOwnerFEK,
       ownerFEKIV,
-
-      /*
-       * Cryptographic version.
-       */
       keyVersion,
     } = req.body;
 
@@ -428,6 +390,105 @@ export async function uploadFile(
 }
 
 /**
+ * List encrypted files belonging to an owner.
+ *
+ * IMPORTANT:
+ * The server does not decrypt metadata.
+ *
+ * Therefore the response intentionally does NOT
+ * contain the plaintext filename, MIME type, or size.
+ *
+ * Those values remain inside encryptedMetadata and
+ * will be decrypted by the browser later.
+ *
+ * TEMPORARY V1:
+ * ownerId currently comes from the request query.
+ *
+ * This MUST be replaced with authenticated
+ * server-side identity before production use.
+ */
+export async function listFiles(
+  req,
+  res
+) {
+  try {
+    const {
+      ownerId,
+    } = req.query;
+
+    /*
+     * ----------------------------------------------------
+     * Validate owner
+     * ----------------------------------------------------
+     */
+    if (
+      typeof ownerId !== "string" ||
+      ownerId.length === 0
+    ) {
+      return res.status(400).json({
+        ok: false,
+
+        message:
+          "Owner ID is required.",
+      });
+    }
+
+    /*
+     * ----------------------------------------------------
+     * Find files belonging to owner
+     * ----------------------------------------------------
+     */
+    const files =
+      await findFilesByOwner(
+        ownerId
+      );
+
+    /*
+     * ----------------------------------------------------
+     * Return only non-sensitive file references
+     * ----------------------------------------------------
+     *
+     * Plaintext metadata is deliberately excluded.
+     */
+    const result =
+      files.map(
+        (file) => ({
+          id:
+            file._id,
+
+          gridFsFileId:
+            file.gridFsFileId,
+
+          keyVersion:
+            file.keyVersion,
+
+          createdAt:
+            file.createdAt,
+        })
+      );
+
+    return res.status(200).json({
+      ok: true,
+
+      files:
+        result,
+    });
+  } catch (error) {
+    console.error(
+      "Encrypted file listing error:",
+      error
+    );
+
+    return res.status(500).json({
+      ok: false,
+
+      message:
+        "Unable to retrieve encrypted file list.",
+    });
+  }
+}
+
+/**
  * Retrieve an encrypted file.
  *
  * IMPORTANT:
@@ -470,6 +531,7 @@ export async function downloadFile(
     ) {
       return res.status(400).json({
         ok: false,
+
         message:
           "File ID is required.",
       });
@@ -481,6 +543,7 @@ export async function downloadFile(
     ) {
       return res.status(400).json({
         ok: false,
+
         message:
           "Owner ID is required.",
       });
@@ -490,9 +553,6 @@ export async function downloadFile(
      * ----------------------------------------------------
      * Find file owned by requester
      * ----------------------------------------------------
-     *
-     * This prevents retrieving an arbitrary file
-     * record when the correct ownerId is supplied.
      */
     const file =
       await findFileByIdForOwner(
@@ -503,6 +563,7 @@ export async function downloadFile(
     if (!file) {
       return res.status(404).json({
         ok: false,
+
         message:
           "File not found.",
       });
@@ -518,6 +579,7 @@ export async function downloadFile(
     ) {
       return res.status(500).json({
         ok: false,
+
         message:
           "Stored GridFS file reference is missing.",
       });
@@ -590,6 +652,7 @@ export async function downloadFile(
     ) {
       return res.status(500).json({
         ok: false,
+
         message:
           "Stored encrypted file is invalid.",
       });
@@ -618,18 +681,6 @@ export async function downloadFile(
      * ----------------------------------------------------
      * Return encrypted file package
      * ----------------------------------------------------
-     *
-     * The browser will use:
-     *
-     * Master Key
-     *     ↓
-     * unwrap Owner FEK
-     *     ↓
-     * FEK
-     *     ↓
-     * decrypt ciphertext
-     *
-     * Metadata follows the same client-side model.
      */
     return res.status(200).json({
       ok: true,
@@ -680,10 +731,6 @@ export async function downloadFile(
       error
     );
 
-    /*
-     * Do not expose internal database or
-     * GridFS error details to the client.
-     */
     return res.status(500).json({
       ok: false,
 
