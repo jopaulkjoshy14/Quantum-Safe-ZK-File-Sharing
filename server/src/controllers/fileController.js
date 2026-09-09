@@ -109,7 +109,6 @@ export async function uploadFile(
 
   try {
     const {
-      ownerId,
       encryptedData,
       fileIV,
       encryptedMetadata,
@@ -123,25 +122,15 @@ export async function uploadFile(
 
     /*
      * ----------------------------------------------------
-     * Validate owner
+     * Determine owner from authenticated identity
      * ----------------------------------------------------
      *
-     * TEMPORARY V1:
+     * ownerId MUST NEVER come from the client.
      *
-     * Authentication middleware has not yet been added,
-     * so ownerId is supplied by the frontend.
-     *
-     * Before production use, this MUST come from the
-     * authenticated server-side identity instead.
+     * requireAuth middleware has already verified the
+     * authentication token and populated req.user.id.
      */
-    if (
-      typeof ownerId !== "string" ||
-      ownerId.length === 0
-    ) {
-      throw new Error(
-        "Owner ID is required."
-      );
-    }
+    const ownerId = req.user.id;
 
     /*
      * ----------------------------------------------------
@@ -390,7 +379,7 @@ export async function uploadFile(
 }
 
 /**
- * List encrypted files belonging to an owner.
+ * List encrypted files belonging to the authenticated user.
  *
  * IMPORTANT:
  * The server does not decrypt metadata.
@@ -400,42 +389,24 @@ export async function uploadFile(
  *
  * Those values remain inside encryptedMetadata and
  * will be decrypted by the browser later.
- *
- * TEMPORARY V1:
- * ownerId currently comes from the request query.
- *
- * This MUST be replaced with authenticated
- * server-side identity before production use.
  */
 export async function listFiles(
   req,
   res
 ) {
   try {
-    const {
-      ownerId,
-    } = req.query;
-
     /*
      * ----------------------------------------------------
-     * Validate owner
+     * Determine owner from authenticated identity
      * ----------------------------------------------------
+     *
+     * ownerId MUST NEVER come from req.query.
      */
-    if (
-      typeof ownerId !== "string" ||
-      ownerId.length === 0
-    ) {
-      return res.status(400).json({
-        ok: false,
-
-        message:
-          "Owner ID is required.",
-      });
-    }
+    const ownerId = req.user.id;
 
     /*
      * ----------------------------------------------------
-     * Find files belonging to owner
+     * Find files belonging to authenticated user
      * ----------------------------------------------------
      */
     const files =
@@ -496,16 +467,13 @@ export async function listFiles(
  *
  * It:
  * 1. verifies that the requested file belongs
- *    to the supplied ownerId
+ *    to the authenticated user
  * 2. retrieves the ciphertext from GridFS
  * 3. returns the ciphertext and protected
  *    cryptographic material to the browser
  *
- * TEMPORARY V1:
- * ownerId currently comes from the request.
- *
- * This MUST be replaced with authenticated
- * server-side identity before production use.
+ * The authenticated user's identity comes from
+ * req.user.id, never from the request query.
  */
 export async function downloadFile(
   req,
@@ -516,9 +484,14 @@ export async function downloadFile(
       fileId,
     } = req.params;
 
-    const {
-      ownerId,
-    } = req.query;
+    /*
+     * ----------------------------------------------------
+     * Determine owner from authenticated identity
+     * ----------------------------------------------------
+     *
+     * ownerId MUST NEVER come from req.query.
+     */
+    const ownerId = req.user.id;
 
     /*
      * ----------------------------------------------------
@@ -537,21 +510,9 @@ export async function downloadFile(
       });
     }
 
-    if (
-      typeof ownerId !== "string" ||
-      ownerId.length === 0
-    ) {
-      return res.status(400).json({
-        ok: false,
-
-        message:
-          "Owner ID is required.",
-      });
-    }
-
     /*
      * ----------------------------------------------------
-     * Find file owned by requester
+     * Find file owned by authenticated requester
      * ----------------------------------------------------
      */
     const file =
