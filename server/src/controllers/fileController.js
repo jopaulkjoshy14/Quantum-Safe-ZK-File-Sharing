@@ -5,6 +5,7 @@ import { getGridFSBucket } from "../config/gridfs.js";
 import {
   createFileDocument,
   insertFile,
+  findFileByIdForOwner,
 } from "../models/file.js";
 
 /**
@@ -95,6 +96,9 @@ function validateIV(
  * - receive ciphertext
  * - store ciphertext in GridFS
  * - store protected metadata/key material
+ *
+ * The server never receives the plaintext file or
+ * plaintext File Encryption Key.
  */
 export async function uploadFile(
   req,
@@ -419,6 +423,272 @@ export async function uploadFile(
       message:
         error.message ||
         "Encrypted file upload failed.",
+    });
+  }
+}
+
+/**
+ * Retrieve an encrypted file.
+ *
+ * IMPORTANT:
+ * The server performs NO decryption.
+ *
+ * It:
+ * 1. verifies that the requested file belongs
+ *    to the supplied ownerId
+ * 2. retrieves the ciphertext from GridFS
+ * 3. returns the ciphertext and protected
+ *    cryptographic material to the browser
+ *
+ * TEMPORARY V1:
+ * ownerId currently comes from the request.
+ *
+ * This MUST be replaced with authenticated
+ * server-side identity before production use.
+ */
+export async function downloadFile(
+  req,
+  res
+) {
+  try {
+    const {
+      fileId,
+    } = req.params;
+
+    const {
+      ownerId,
+    } = req.query;
+
+    /*
+     * ----------------------------------------------------
+     * Validate request
+     * ----------------------------------------------------
+     */
+    if (
+      typeof fileId !== "string" ||
+      fileId.length === 0
+    ) {
+      return res.status(400).json({
+        ok: false,
+        message:
+          "File ID is required.",
+      });
+    }
+
+    if (
+      typeof ownerId !== "string" ||
+      ownerId.length === 0
+    ) {
+      return res.status(400).json({
+        ok: false,
+        message:
+          "Owner ID is required.",
+      });
+    }
+
+    /*
+     * ----------------------------------------------------
+     * Find file owned by requester
+     * ----------------------------------------------------
+     *
+     * This prevents retrieving an arbitrary file
+     * record when the correct ownerId is supplied.
+     */
+    const file =
+      await findFileByIdForOwner(
+        fileId,
+        ownerId
+      );
+
+    if (!file) {
+      return res.status(404).json({
+        ok: false,
+        message:
+          "File not found.",
+      });
+    }
+
+    /*
+     * ----------------------------------------------------
+     * Validate GridFS ID
+     * ----------------------------------------------------
+     */
+    if (
+      !file.gridFsFileId
+    ) {
+      return res.status(500).json({
+        ok: false,
+        message:
+          "Stored GridFS file reference is missing.",
+      });
+    }
+
+    /*
+     * ----------------------------------------------------
+     * Read encrypted bytes from GridFS
+     * ----------------------------------------------------
+     *
+     * These bytes are ciphertext.
+     *
+     * The backend does NOT possess the FEK needed
+     * to decrypt them.
+     */
+    const bucket =
+      getGridFSBucket();
+
+    const downloadStream =
+      bucket.openDownloadStream(
+        file.gridFsFileId
+      );
+
+    const chunks = [];
+
+    let totalSize = 0;
+
+    await new Promise(
+      (resolve, reject) => {
+        downloadStream.on(
+          "data",
+          (chunk) => {
+            totalSize +=
+              chunk.length;
+
+            /*
+             * Defensive size check.
+             */
+            if (
+              totalSize >
+              MAX_FILE_SIZE + 16
+            ) {
+              downloadStream.destroy(
+                new Error(
+                  "Stored encrypted file exceeds the V1 size limit."
+                )
+              );
+
+              return;
+            }
+
+            chunks.push(chunk);
+          }
+        );
+
+        downloadStream.on(
+          "end",
+          resolve
+        );
+
+        downloadStream.on(
+          "error",
+          reject
+        );
+      }
+    );
+
+    if (
+      totalSize < 16
+    ) {
+      return res.status(500).json({
+        ok: false,
+        message:
+          "Stored encrypted file is invalid.",
+      });
+    }
+
+    const encryptedBuffer =
+      Buffer.concat(
+        chunks
+      );
+
+    /*
+     * ----------------------------------------------------
+     * Convert ciphertext to Base64
+     * ----------------------------------------------------
+     *
+     * This is V1's simple JSON transport format.
+     *
+     * No plaintext is generated here.
+     */
+    const encryptedData =
+      encryptedBuffer.toString(
+        "base64"
+      );
+
+    /*
+     * ----------------------------------------------------
+     * Return encrypted file package
+     * ----------------------------------------------------
+     *
+     * The browser will use:
+     *
+     * Master Key
+     *     ↓
+     * unwrap Owner FEK
+     *     ↓
+     * FEK
+     *     ↓
+     * decrypt ciphertext
+     *
+     * Metadata follows the same client-side model.
+     */
+    return res.status(200).json({
+      ok: true,
+
+      message:
+        "Encrypted file retrieved successfully.",
+
+      file: {
+        id:
+          file._id,
+
+        gridFsFileId:
+          file.gridFsFileId,
+
+        encryptedData,
+
+        fileIV:
+          file.fileIV,
+
+        encryptedMetadata:
+          file.encryptedMetadata,
+
+        metadataIV:
+          file.metadataIV,
+
+        wrappedMetadataKey:
+          file.wrappedMetadataKey,
+
+        metadataKeyIV:
+          file.metadataKeyIV,
+
+        wrappedOwnerFEK:
+          file.wrappedOwnerFEK,
+
+        ownerFEKIV:
+          file.ownerFEKIV,
+
+        keyVersion:
+          file.keyVersion,
+
+        createdAt:
+          file.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error(
+      "Encrypted file retrieval error:",
+      error
+    );
+
+    /*
+     * Do not expose internal database or
+     * GridFS error details to the client.
+     */
+    return res.status(500).json({
+      ok: false,
+
+      message:
+        "Encrypted file retrieval failed.",
     });
   }
 }
