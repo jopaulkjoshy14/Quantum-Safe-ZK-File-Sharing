@@ -56,6 +56,10 @@ export function createFileDocument({
   // GridFS identifier for the encrypted file.
   gridFsFileId,
 
+  // AES-256-GCM IV used for file encryption.
+  // The IV is not secret, but is required for decryption.
+  fileIV,
+
   // Encrypted metadata.
   encryptedMetadata,
   metadataIV,
@@ -77,6 +81,15 @@ export function createFileDocument({
   if (!gridFsFileId) {
     throw new Error(
       "GridFS file ID is required."
+    );
+  }
+
+  if (
+    typeof fileIV !== "string" ||
+    fileIV.length === 0
+  ) {
+    throw new Error(
+      "File IV is required."
     );
   }
 
@@ -130,6 +143,14 @@ export function createFileDocument({
 
     gridFsFileId:
       new ObjectId(gridFsFileId),
+
+    /*
+     * AES-GCM file IV.
+     *
+     * This is not secret and must be retained
+     * so the browser can decrypt the ciphertext.
+     */
+    fileIV,
 
     /*
      * Sensitive metadata remains encrypted.
