@@ -186,9 +186,7 @@ function App() {
    * ----------------------------------------------------
    */
   useEffect(() => {
-    fetch(
-      `${API_BASE_URL}/health`
-    )
+    fetch(`${API_BASE_URL}/health`)
       .then(async (response) => {
         if (!response.ok) {
           throw new Error(
@@ -461,8 +459,16 @@ function App() {
           }
         );
 
-      const data =
-        await response.json();
+      let data;
+
+      try {
+        data =
+          await response.json();
+      } catch {
+        throw new Error(
+          "The server returned an invalid response."
+        );
+      }
 
       if (!response.ok) {
         throw new Error(
@@ -475,14 +481,37 @@ function App() {
        * ------------------------------------------------
        * Validate authentication token.
        * ------------------------------------------------
+       *
+       * IMPORTANT:
+       *
+       * authController.js returns authToken at the
+       * top level of the response:
+       *
+       * data.authToken
+       *
+       * It is NOT inside data.user.
        */
       if (
-        typeof data.user?.authToken !==
+        typeof data.authToken !==
           "string" ||
-        data.user.authToken.length === 0
+        data.authToken.length === 0
       ) {
         throw new Error(
           "Authentication token was not returned by the server."
+        );
+      }
+
+      /*
+       * ------------------------------------------------
+       * Validate user cryptographic material.
+       * ------------------------------------------------
+       */
+      if (
+        !data.user ||
+        typeof data.user !== "object"
+      ) {
+        throw new Error(
+          "User authentication data was not returned by the server."
         );
       }
 
@@ -529,7 +558,7 @@ function App() {
        * ------------------------------------------------
        */
       const authenticatedToken =
-        data.user.authToken;
+        data.authToken;
 
       setAuthToken(
         authenticatedToken
@@ -559,7 +588,7 @@ function App() {
       );
 
       setLoginStatus(
-        "Login successful. Cryptographic keys recovered locally."
+        "Login successful. Authenticated session and cryptographic keys established."
       );
 
       /*
