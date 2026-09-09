@@ -62,8 +62,15 @@ export function createFileDocument({
 
   // Encrypted metadata.
   encryptedMetadata,
+
+  // IV used to encrypt the metadata itself.
   metadataIV,
+
+  // Metadata key protected by the Master Key.
   wrappedMetadataKey,
+
+  // IV used to wrap the metadata key.
+  metadataKeyIV,
 
   // Owner's protected FEK.
   wrappedOwnerFEK,
@@ -121,6 +128,15 @@ export function createFileDocument({
   }
 
   if (
+    typeof metadataKeyIV !== "string" ||
+    metadataKeyIV.length === 0
+  ) {
+    throw new Error(
+      "Metadata key IV is required."
+    );
+  }
+
+  if (
     typeof wrappedOwnerFEK !== "string" ||
     wrappedOwnerFEK.length === 0
   ) {
@@ -139,25 +155,38 @@ export function createFileDocument({
   }
 
   return {
-    ownerId: new ObjectId(ownerId),
+    ownerId:
+      new ObjectId(ownerId),
 
     gridFsFileId:
       new ObjectId(gridFsFileId),
 
     /*
-     * AES-GCM file IV.
-     *
-     * This is not secret and must be retained
-     * so the browser can decrypt the ciphertext.
+     * AES-GCM file encryption IV.
      */
     fileIV,
 
     /*
-     * Sensitive metadata remains encrypted.
+     * Encrypted sensitive file metadata.
      */
     encryptedMetadata,
+
+    /*
+     * AES-GCM IV used for metadata encryption.
+     */
     metadataIV,
+
+    /*
+     * Metadata Key encrypted using the
+     * Master-Key-derived wrapping key.
+     */
     wrappedMetadataKey,
+
+    /*
+     * AES-GCM IV used when wrapping
+     * the Metadata Key.
+     */
+    metadataKeyIV,
 
     /*
      * The FEK itself is NEVER stored.
@@ -172,7 +201,8 @@ export function createFileDocument({
         ? keyVersion
         : 1,
 
-    createdAt: new Date(),
+    createdAt:
+      new Date(),
   };
 }
 
@@ -182,7 +212,8 @@ export function createFileDocument({
 export async function insertFile(
   fileDocument
 ) {
-  const files = getFilesCollection();
+  const files =
+    getFilesCollection();
 
   return files.insertOne(
     fileDocument
