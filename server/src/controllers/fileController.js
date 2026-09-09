@@ -9,17 +9,12 @@ import {
 
 /**
  * Maximum encrypted file size for V1.
- *
- * This is intentionally conservative for the first
- * implementation. It can be increased later if needed.
  */
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB
+const MAX_FILE_SIZE =
+  100 * 1024 * 1024; // 100 MB
 
 /**
  * Validate a Base64 string.
- *
- * The frontend sends encrypted binary data as Base64
- * because the current API uses JSON.
  */
 function validateBase64(
   value,
@@ -34,10 +29,6 @@ function validateBase64(
     );
   }
 
-  /*
-   * Base64 characters may contain:
-   * A-Z, a-z, 0-9, +, / and optional =
-   */
   if (
     !/^[A-Za-z0-9+/]*={0,2}$/.test(value)
   ) {
@@ -98,15 +89,6 @@ function validateIV(
 /**
  * Upload an already-encrypted file.
  *
- * IMPORTANT:
- *
- * The server does NOT:
- * - receive the plaintext file
- * - generate the FEK
- * - decrypt the file
- * - unwrap the FEK
- * - perform AES encryption
- *
  * The browser performs all cryptographic operations.
  *
  * Server responsibility:
@@ -139,7 +121,17 @@ export async function uploadFile(
        */
       encryptedMetadata,
       metadataIV,
+
+      /*
+       * Metadata Key protected by the
+       * Master-Key-derived wrapping key.
+       */
       wrappedMetadataKey,
+
+      /*
+       * IV used to wrap the Metadata Key.
+       */
+      metadataKeyIV,
 
       /*
        * Owner FEK protected using:
@@ -198,11 +190,10 @@ export async function uploadFile(
 
     /*
      * AES-GCM adds a 16-byte authentication tag.
-     *
-     * Therefore even an empty plaintext produces
-     * at least a 16-byte encrypted result.
      */
-    if (encryptedBuffer.length < 16) {
+    if (
+      encryptedBuffer.length < 16
+    ) {
       throw new Error(
         "Encrypted file data is invalid."
       );
@@ -242,9 +233,19 @@ export async function uploadFile(
       "Metadata IV"
     );
 
+    /*
+     * ----------------------------------------------------
+     * Validate wrapped metadata key
+     * ----------------------------------------------------
+     */
     validateBase64(
       wrappedMetadataKey,
       "Wrapped metadata key"
+    );
+
+    validateIV(
+      metadataKeyIV,
+      "Metadata key IV"
     );
 
     /*
@@ -307,24 +308,23 @@ export async function uploadFile(
     gridFsFileId =
       uploadStream.id;
 
-    /*
-     * Convert the encrypted Buffer into
-     * a readable stream.
-     */
     const readable =
       Readable.from(
         [encryptedBuffer]
       );
 
-    /*
-     * Pipe ciphertext into GridFS.
-     */
     await new Promise(
       (resolve, reject) => {
         readable
           .pipe(uploadStream)
-          .on("finish", resolve)
-          .on("error", reject);
+          .on(
+            "finish",
+            resolve
+          )
+          .on(
+            "error",
+            reject
+          );
 
         readable.on(
           "error",
@@ -335,7 +335,7 @@ export async function uploadFile(
 
     /*
      * ----------------------------------------------------
-     * Create the corresponding database record
+     * Create database record
      * ----------------------------------------------------
      */
     const fileDocument =
@@ -345,17 +345,13 @@ export async function uploadFile(
         gridFsFileId:
           gridFsFileId.toString(),
 
-        /*
-         * Store the AES-GCM file IV.
-         *
-         * The IV is not secret, but it is required
-         * to decrypt the ciphertext later.
-         */
         fileIV,
 
         encryptedMetadata,
         metadataIV,
+
         wrappedMetadataKey,
+        metadataKeyIV,
 
         wrappedOwnerFEK,
         ownerFEKIV,
@@ -373,20 +369,19 @@ export async function uploadFile(
      * ----------------------------------------------------
      * Success
      * ----------------------------------------------------
-     *
-     * Do NOT return plaintext file information.
-     *
-     * The frontend receives identifiers required
-     * for future retrieval.
      */
     return res.status(201).json({
       ok: true,
+
       message:
         "Encrypted file uploaded successfully.",
 
       file: {
-        id: result.insertedId,
+        id:
+          result.insertedId,
+
         gridFsFileId,
+
         keyVersion:
           normalizedKeyVersion,
       },
@@ -401,10 +396,6 @@ export async function uploadFile(
      * ----------------------------------------------------
      * Cleanup
      * ----------------------------------------------------
-     *
-     * If GridFS upload succeeded but creating the
-     * metadata record failed, remove the orphaned
-     * encrypted object.
      */
     if (gridFsFileId) {
       try {
@@ -424,6 +415,7 @@ export async function uploadFile(
 
     return res.status(400).json({
       ok: false,
+
       message:
         error.message ||
         "Encrypted file upload failed.",
