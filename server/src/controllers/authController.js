@@ -54,7 +54,9 @@ export async function register(req, res) {
 
     return res.status(400).json({
       ok: false,
-      message: error.message || "Registration failed.",
+      message:
+        error.message ||
+        "Registration failed.",
     });
   }
 }
@@ -76,6 +78,21 @@ export async function login(req, res) {
       message: "Login successful.",
 
       /*
+       * Server authentication token.
+       *
+       * This token identifies the authenticated account
+       * for protected API requests.
+       *
+       * It does NOT contain:
+       * - Password
+       * - Master Key
+       * - FEK
+       * - ML-KEM private key
+       * - Plaintext file data
+       */
+      authToken: result.authToken,
+
+      /*
        * These values are protected cryptographic material.
        *
        * The browser will use them to recover the Master Key
@@ -85,17 +102,29 @@ export async function login(req, res) {
         id: result.userId,
         username: result.username,
 
-        passwordKdfSalt: result.passwordKdfSalt,
-        passwordKdfParams: result.passwordKdfParams,
+        passwordKdfSalt:
+          result.passwordKdfSalt,
 
-        wrappedMasterKey: result.wrappedMasterKey,
-        masterKeyIV: result.masterKeyIV,
-        masterKeyVersion: result.masterKeyVersion,
+        passwordKdfParams:
+          result.passwordKdfParams,
 
-        mlKemPublicKey: result.mlKemPublicKey,
+        wrappedMasterKey:
+          result.wrappedMasterKey,
+
+        masterKeyIV:
+          result.masterKeyIV,
+
+        masterKeyVersion:
+          result.masterKeyVersion,
+
+        mlKemPublicKey:
+          result.mlKemPublicKey,
+
         wrappedMlKemPrivateKey:
           result.wrappedMlKemPrivateKey,
-        privateKeyIV: result.privateKeyIV,
+
+        privateKeyIV:
+          result.privateKeyIV,
       },
     });
   } catch (error) {
@@ -103,7 +132,9 @@ export async function login(req, res) {
 
     return res.status(401).json({
       ok: false,
-      message: error.message || "Login failed.",
+      message:
+        error.message ||
+        "Login failed.",
     });
   }
 }
