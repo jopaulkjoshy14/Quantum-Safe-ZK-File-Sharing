@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { prepareRegistrationCrypto } from "./crypto/registrationCrypto.js";
 import { recoverLoginKeys } from "./crypto/loginCrypto.js";
 
+import { uploadEncryptedFile } from "./services/fileUploadService.js";
+
 function App() {
   const API_BASE_URL =
     import.meta.env.VITE_API_BASE_URL ||
@@ -11,67 +13,144 @@ function App() {
   const [status, setStatus] =
     useState("Checking backend...");
 
-  const [error, setError] = useState("");
+  const [error, setError] =
+    useState("");
 
   /*
+   * ----------------------------------------------------
    * Registration state
+   * ----------------------------------------------------
    */
-  const [registerUsername, setRegisterUsername] =
-    useState("");
+  const [
+    registerUsername,
+    setRegisterUsername,
+  ] = useState("");
 
-  const [registerPassword, setRegisterPassword] =
-    useState("");
+  const [
+    registerPassword,
+    setRegisterPassword,
+  ] = useState("");
 
-  const [registerStatus, setRegisterStatus] =
-    useState("");
+  const [
+    registerStatus,
+    setRegisterStatus,
+  ] = useState("");
 
-  const [registerError, setRegisterError] =
-    useState("");
+  const [
+    registerError,
+    setRegisterError,
+  ] = useState("");
 
-  const [isRegistering, setIsRegistering] =
-    useState(false);
+  const [
+    isRegistering,
+    setIsRegistering,
+  ] = useState(false);
 
   /*
+   * ----------------------------------------------------
    * Login state
+   * ----------------------------------------------------
    */
-  const [loginUsername, setLoginUsername] =
-    useState("");
+  const [
+    loginUsername,
+    setLoginUsername,
+  ] = useState("");
 
-  const [loginPassword, setLoginPassword] =
-    useState("");
+  const [
+    loginPassword,
+    setLoginPassword,
+  ] = useState("");
 
-  const [loginStatus, setLoginStatus] =
-    useState("");
+  const [
+    loginStatus,
+    setLoginStatus,
+  ] = useState("");
 
-  const [loginError, setLoginError] =
-    useState("");
+  const [
+    loginError,
+    setLoginError,
+  ] = useState("");
 
-  const [isLoggingIn, setIsLoggingIn] =
-    useState(false);
+  const [
+    isLoggingIn,
+    setIsLoggingIn,
+  ] = useState(false);
 
   /*
-   * Runtime-only cryptographic state.
+   * ----------------------------------------------------
+   * Runtime-only cryptographic state
+   * ----------------------------------------------------
    *
    * IMPORTANT:
+   *
    * These values are deliberately NOT stored in:
    * - localStorage
    * - sessionStorage
    * - cookies
    * - IndexedDB
    *
-   * They exist only while this React application is running.
+   * They exist only while this React application
+   * is running.
    */
-  const [currentUser, setCurrentUser] =
-    useState(null);
+  const [
+    currentUser,
+    setCurrentUser,
+  ] = useState(null);
 
-  const [runtimeKeys, setRuntimeKeys] =
-    useState(null);
+  const [
+    runtimeKeys,
+    setRuntimeKeys,
+  ] = useState(null);
 
   /*
-   * Check backend availability.
+   * ----------------------------------------------------
+   * File upload state
+   * ----------------------------------------------------
+   */
+  const [
+    selectedFile,
+    setSelectedFile,
+  ] = useState(null);
+
+  const [
+    uploadStatus,
+    setUploadStatus,
+  ] = useState("");
+
+  const [
+    uploadError,
+    setUploadError,
+  ] = useState("");
+
+  const [
+    isUploading,
+    setIsUploading,
+  ] = useState(false);
+
+  const [
+    uploadResult,
+    setUploadResult,
+  ] = useState(null);
+
+  /*
+   * Maximum plaintext file size for V1.
+   *
+   * The backend allows approximately 100 MB of
+   * encrypted data. The encrypted file also contains
+   * the AES-GCM authentication tag.
+   */
+  const MAX_FILE_SIZE =
+    100 * 1024 * 1024;
+
+  /*
+   * ----------------------------------------------------
+   * Check backend availability
+   * ----------------------------------------------------
    */
   useEffect(() => {
-    fetch(`${API_BASE_URL}/health`)
+    fetch(
+      `${API_BASE_URL}/health`
+    )
       .then(async (response) => {
         if (!response.ok) {
           throw new Error(
@@ -87,12 +166,16 @@ function App() {
       })
       .catch((err) => {
         setError(err.message);
-        setStatus("Backend unavailable");
+        setStatus(
+          "Backend unavailable"
+        );
       });
   }, [API_BASE_URL]);
 
   /*
+   * ----------------------------------------------------
    * Registration
+   * ----------------------------------------------------
    */
   async function handleRegister(event) {
     event.preventDefault();
@@ -116,22 +199,31 @@ function App() {
           registerPassword
         );
 
-      const response = await fetch(
-        `${API_BASE_URL}/auth/register`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            username: registerUsername,
-            password: registerPassword,
-            ...cryptoMaterial,
-          }),
-        }
-      );
+      const response =
+        await fetch(
+          `${API_BASE_URL}/auth/register`,
+          {
+            method: "POST",
 
-      const data = await response.json();
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              username:
+                registerUsername,
+
+              password:
+                registerPassword,
+
+              ...cryptoMaterial,
+            }),
+          }
+        );
+
+      const data =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(
@@ -162,7 +254,9 @@ function App() {
   }
 
   /*
+   * ----------------------------------------------------
    * Login
+   * ----------------------------------------------------
    */
   async function handleLogin(event) {
     event.preventDefault();
@@ -178,27 +272,43 @@ function App() {
     setRuntimeKeys(null);
     setCurrentUser(null);
 
+    /*
+     * Clear previous upload state.
+     */
+    setSelectedFile(null);
+    setUploadStatus("");
+    setUploadError("");
+    setUploadResult(null);
+
     try {
       /*
        * Step 1:
        *
        * Authenticate with the backend.
        */
-      const response = await fetch(
-        `${API_BASE_URL}/auth/login`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            username: loginUsername,
-            password: loginPassword,
-          }),
-        }
-      );
+      const response =
+        await fetch(
+          `${API_BASE_URL}/auth/login`,
+          {
+            method: "POST",
 
-      const data = await response.json();
+            headers: {
+              "Content-Type":
+                "application/json",
+            },
+
+            body: JSON.stringify({
+              username:
+                loginUsername,
+
+              password:
+                loginPassword,
+            }),
+          }
+        );
+
+      const data =
+        await response.json();
 
       if (!response.ok) {
         throw new Error(
@@ -210,17 +320,13 @@ function App() {
       /*
        * Step 2:
        *
-       * The backend has authenticated the password.
-       *
-       * It has returned only protected
-       * cryptographic material.
-       *
-       * The actual Master Key and ML-KEM
-       * private key are recovered locally.
+       * Recover the Master Key and ML-KEM
+       * private key entirely inside the browser.
        */
       const recoveredKeys =
         await recoverLoginKeys({
-          password: loginPassword,
+          password:
+            loginPassword,
 
           passwordKdfSalt:
             data.user.passwordKdfSalt,
@@ -235,7 +341,8 @@ function App() {
             data.user.masterKeyIV,
 
           wrappedMlKemPrivateKey:
-            data.user.wrappedMlKemPrivateKey,
+            data.user
+              .wrappedMlKemPrivateKey,
 
           privateKeyIV:
             data.user.privateKeyIV,
@@ -247,11 +354,15 @@ function App() {
        * Keep recovered keys only in
        * React runtime memory.
        */
-      setRuntimeKeys(recoveredKeys);
+      setRuntimeKeys(
+        recoveredKeys
+      );
 
       setCurrentUser({
         id: data.user.id,
-        username: data.user.username,
+
+        username:
+          data.user.username,
 
         /*
          * Public key is not secret.
@@ -288,7 +399,188 @@ function App() {
   }
 
   /*
+   * ----------------------------------------------------
+   * File selection
+   * ----------------------------------------------------
+   */
+  function handleFileSelect(event) {
+    const file =
+      event.target.files?.[0];
+
+    /*
+     * Clear previous upload state.
+     */
+    setUploadStatus("");
+    setUploadError("");
+    setUploadResult(null);
+
+    if (!file) {
+      setSelectedFile(null);
+      return;
+    }
+
+    /*
+     * Validate V1 size limit before
+     * performing expensive browser-side
+     * encryption.
+     */
+    if (
+      file.size >
+      MAX_FILE_SIZE
+    ) {
+      setSelectedFile(null);
+
+      setUploadError(
+        "File exceeds the V1 maximum size of 100 MB."
+      );
+
+      /*
+       * Reset the input so the same file can
+       * be selected again after correction.
+       */
+      event.target.value = "";
+
+      return;
+    }
+
+    setSelectedFile(file);
+  }
+
+  /*
+   * ----------------------------------------------------
+   * Encrypted file upload
+   * ----------------------------------------------------
+   */
+  async function handleFileUpload(event) {
+    event.preventDefault();
+
+    setUploadStatus("");
+    setUploadError("");
+    setUploadResult(null);
+
+    if (!selectedFile) {
+      setUploadError(
+        "Please select a file first."
+      );
+
+      return;
+    }
+
+    if (!currentUser) {
+      setUploadError(
+        "You must be logged in to upload a file."
+      );
+
+      return;
+    }
+
+    if (!runtimeKeys) {
+      setUploadError(
+        "Cryptographic keys are not available."
+      );
+
+      return;
+    }
+
+    if (
+      !(runtimeKeys.masterKey instanceof
+        Uint8Array)
+    ) {
+      setUploadError(
+        "Master Key is unavailable."
+      );
+
+      return;
+    }
+
+    setIsUploading(true);
+
+    try {
+      setUploadStatus(
+        "Encrypting file and metadata locally..."
+      );
+
+      /*
+       * IMPORTANT:
+       *
+       * This function performs:
+       *
+       * File
+       *   ↓
+       * AES-256-GCM
+       *   ↓
+       * ciphertext
+       *
+       * Metadata
+       *   ↓
+       * AES-256-GCM
+       *   ↓
+       * encrypted metadata
+       *
+       * Master Key
+       *   ↓
+       * HKDF
+       *   ↓
+       * wrapping keys
+       *
+       * Nothing plaintext is sent to the backend.
+       */
+      const result =
+        await uploadEncryptedFile({
+          file: selectedFile,
+
+          ownerId:
+            currentUser.id,
+
+          masterKey:
+            runtimeKeys.masterKey,
+
+          apiBaseUrl:
+            API_BASE_URL,
+        });
+
+      setUploadResult(result);
+
+      setUploadStatus(
+        "File encrypted in the browser and uploaded successfully."
+      );
+
+      /*
+       * Keep the selected File object available
+       * only for the current UI session.
+       */
+      setSelectedFile(null);
+
+      /*
+       * Reset the file input.
+       */
+      const input =
+        document.getElementById(
+          "fileUpload"
+        );
+
+      if (input) {
+        input.value = "";
+      }
+    } catch (err) {
+      console.error(
+        "Encrypted file upload failed:",
+        err
+      );
+
+      setUploadError(
+        err.message ||
+          "Encrypted file upload failed."
+      );
+    } finally {
+      setIsUploading(false);
+    }
+  }
+
+  /*
+   * ----------------------------------------------------
    * Logout
+   * ----------------------------------------------------
    */
   function handleLogout() {
     /*
@@ -301,6 +593,26 @@ function App() {
     setLoginUsername("");
     setLoginPassword("");
 
+    /*
+     * Clear upload-related state.
+     */
+    setSelectedFile(null);
+    setUploadStatus("");
+    setUploadError("");
+    setUploadResult(null);
+
+    /*
+     * Reset file input if present.
+     */
+    const input =
+      document.getElementById(
+        "fileUpload"
+      );
+
+    if (input) {
+      input.value = "";
+    }
+
     setLoginStatus(
       "Logged out. Runtime cryptographic keys cleared."
     );
@@ -311,12 +623,12 @@ function App() {
   return (
     <main className="container py-5">
       <div className="row justify-content-center">
-        <div className="col-lg-9">
+        <div className="col-lg-10">
           <div className="card shadow-sm">
             <div className="card-body p-4">
 
               <span className="badge text-bg-dark mb-3">
-                Frozen V1 — Authentication
+                Frozen V1 — Client-Side Encryption
               </span>
 
               <h1 className="h3">
@@ -332,6 +644,7 @@ function App() {
 
               <hr />
 
+              {/* Backend status */}
               <h2 className="h6">
                 Backend status
               </h2>
@@ -357,7 +670,9 @@ function App() {
                   </h2>
 
                   <form
-                    onSubmit={handleRegister}
+                    onSubmit={
+                      handleRegister
+                    }
                   >
                     <div className="mb-3">
                       <label
@@ -374,9 +689,12 @@ function App() {
                         value={
                           registerUsername
                         }
-                        onChange={(event) =>
+                        onChange={(
+                          event
+                        ) =>
                           setRegisterUsername(
-                            event.target.value
+                            event.target
+                              .value
                           )
                         }
                         placeholder="Enter username"
@@ -402,9 +720,12 @@ function App() {
                         value={
                           registerPassword
                         }
-                        onChange={(event) =>
+                        onChange={(
+                          event
+                        ) =>
                           setRegisterPassword(
-                            event.target.value
+                            event.target
+                              .value
                           )
                         }
                         placeholder="Enter password"
@@ -448,7 +769,9 @@ function App() {
                   </h2>
 
                   <form
-                    onSubmit={handleLogin}
+                    onSubmit={
+                      handleLogin
+                    }
                   >
                     <div className="mb-3">
                       <label
@@ -465,9 +788,12 @@ function App() {
                         value={
                           loginUsername
                         }
-                        onChange={(event) =>
+                        onChange={(
+                          event
+                        ) =>
                           setLoginUsername(
-                            event.target.value
+                            event.target
+                              .value
                           )
                         }
                         placeholder="Enter username"
@@ -493,9 +819,12 @@ function App() {
                         value={
                           loginPassword
                         }
-                        onChange={(event) =>
+                        onChange={(
+                          event
+                        ) =>
                           setLoginPassword(
-                            event.target.value
+                            event.target
+                              .value
                           )
                         }
                         placeholder="Enter password"
@@ -546,16 +875,19 @@ function App() {
                     <p className="mb-2">
                       Logged in as{" "}
                       <strong>
-                        {currentUser.username}
+                        {
+                          currentUser.username
+                        }
                       </strong>
                       .
                     </p>
 
                     <p className="small mb-3">
-                      Master Key and ML-KEM-768
-                      private key have been
-                      recovered inside the browser
-                      and are currently held only
+                      Master Key and
+                      ML-KEM-768 private key
+                      have been recovered
+                      inside the browser and
+                      are currently held only
                       in runtime memory.
                     </p>
 
@@ -570,8 +902,9 @@ function App() {
                     </button>
                   </div>
 
+                  {/* Cryptographic recovery */}
                   {runtimeKeys && (
-                    <div className="card bg-light border-0">
+                    <div className="card bg-light border-0 mb-4">
                       <div className="card-body">
                         <h2 className="h6">
                           Cryptographic Recovery
@@ -619,8 +952,8 @@ function App() {
                           </li>
 
                           <li>
-                            Keys persisted to browser
-                            storage:{" "}
+                            Keys persisted to
+                            browser storage:{" "}
                             <strong>
                               No
                             </strong>
@@ -629,15 +962,191 @@ function App() {
                       </div>
                     </div>
                   )}
+
+                  {/* Encrypted File Upload */}
+                  <div className="card border-primary">
+                    <div className="card-body">
+                      <h2 className="h5">
+                        Secure File Upload
+                      </h2>
+
+                      <p className="text-secondary small">
+                        Your file is encrypted
+                        inside the browser before
+                        any file data is sent to
+                        the server.
+                      </p>
+
+                      <div className="alert alert-info small">
+                        <strong>
+                          Zero-Knowledge
+                          Protection:
+                        </strong>{" "}
+                        The backend receives
+                        ciphertext, encrypted
+                        metadata, protected keys,
+                        and non-secret IVs. It
+                        does not receive the
+                        plaintext file or FEK.
+                      </div>
+
+                      <form
+                        onSubmit={
+                          handleFileUpload
+                        }
+                      >
+                        <div className="mb-3">
+                          <label
+                            htmlFor="fileUpload"
+                            className="form-label"
+                          >
+                            Select file
+                          </label>
+
+                          <input
+                            id="fileUpload"
+                            type="file"
+                            className="form-control"
+                            onChange={
+                              handleFileSelect
+                            }
+                            disabled={
+                              isUploading
+                            }
+                          />
+
+                          <div className="form-text">
+                            Maximum V1 file
+                            size: 100 MB.
+                          </div>
+                        </div>
+
+                        {selectedFile && (
+                          <div className="card bg-light border-0 mb-3">
+                            <div className="card-body">
+                              <h3 className="h6">
+                                Selected file
+                              </h3>
+
+                              <div className="small">
+                                <div>
+                                  <strong>
+                                    Name:
+                                  </strong>{" "}
+                                  {
+                                    selectedFile.name
+                                  }
+                                </div>
+
+                                <div>
+                                  <strong>
+                                    Type:
+                                  </strong>{" "}
+                                  {selectedFile.type ||
+                                    "Unknown"}
+                                </div>
+
+                                <div>
+                                  <strong>
+                                    Size:
+                                  </strong>{" "}
+                                  {(
+                                    selectedFile
+                                      .size /
+                                    (1024 * 1024)
+                                  ).toFixed(
+                                    2
+                                  )}{" "}
+                                  MB
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {uploadError && (
+                          <div className="alert alert-danger">
+                            {uploadError}
+                          </div>
+                        )}
+
+                        {uploadStatus && (
+                          <div className="alert alert-success">
+                            {uploadStatus}
+                          </div>
+                        )}
+
+                        <button
+                          type="submit"
+                          className="btn btn-primary w-100"
+                          disabled={
+                            isUploading ||
+                            !selectedFile
+                          }
+                        >
+                          {isUploading
+                            ? "Encrypting & Uploading..."
+                            : "Encrypt & Upload File"}
+                        </button>
+                      </form>
+
+                      {uploadResult && (
+                        <div className="card bg-light border-0 mt-4">
+                          <div className="card-body">
+                            <h3 className="h6">
+                              Upload Result
+                            </h3>
+
+                            <ul className="small mb-0">
+                              <li>
+                                Server accepted
+                                ciphertext:{" "}
+                                <strong>
+                                  Yes
+                                </strong>
+                              </li>
+
+                              <li>
+                                Cryptographic
+                                version:{" "}
+                                <strong>
+                                  {
+                                    uploadResult
+                                      .file
+                                      ?.keyVersion
+                                  }
+                                </strong>
+                              </li>
+
+                              <li>
+                                GridFS object
+                                created:{" "}
+                                <strong>
+                                  Yes
+                                </strong>
+                              </li>
+
+                              <li>
+                                Plaintext sent
+                                to server:{" "}
+                                <strong>
+                                  No
+                                </strong>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </>
               )}
 
               <hr />
 
               <p className="small text-secondary mb-0">
-                Current stage: authentication and
-                browser-side cryptographic key
-                recovery.
+                Current stage: browser-side file
+                encryption and encrypted storage.
               </p>
 
             </div>
