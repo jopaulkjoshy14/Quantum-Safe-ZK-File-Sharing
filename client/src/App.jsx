@@ -4,6 +4,7 @@ import { prepareRegistrationCrypto } from "./crypto/registrationCrypto.js";
 import { recoverLoginKeys } from "./crypto/loginCrypto.js";
 
 import { uploadEncryptedFile } from "./services/fileUploadService.js";
+import { downloadAndDecryptFile } from "./services/fileDownloadService.js";
 
 function App() {
   const API_BASE_URL =
@@ -99,15 +100,6 @@ function App() {
    * ----------------------------------------------------
    * Runtime-only cryptographic state
    * ----------------------------------------------------
-   *
-   * These values are deliberately NOT stored in:
-   * - localStorage
-   * - sessionStorage
-   * - cookies
-   * - IndexedDB
-   *
-   * They exist only while this React application
-   * is running.
    */
   const [
     currentUser,
@@ -173,6 +165,29 @@ function App() {
     isLoadingFiles,
     setIsLoadingFiles,
   ] = useState(false);
+
+  /*
+   * ----------------------------------------------------
+   * File download / decryption state
+   * ----------------------------------------------------
+   *
+   * Decrypted file bytes exist only temporarily
+   * during the browser download operation.
+   */
+  const [
+    downloadingFileId,
+    setDownloadingFileId,
+  ] = useState(null);
+
+  const [
+    downloadStatus,
+    setDownloadStatus,
+  ] = useState("");
+
+  const [
+    downloadError,
+    setDownloadError,
+  ] = useState("");
 
   /*
    * Maximum plaintext file size for V1.
@@ -294,18 +309,10 @@ function App() {
    * List encrypted files
    * ----------------------------------------------------
    *
-   * IMPORTANT:
-   *
    * The backend returns only file references.
    *
    * Plaintext filename, type and size remain
    * inside encryptedMetadata.
-   *
-   * Those values will be decrypted locally
-   * in the next stage.
-   *
-   * The authentication token is sent through the
-   * Authorization header.
    *
    * ownerId is deliberately NOT sent.
    */
@@ -407,9 +414,8 @@ function App() {
     setIsLoggingIn(true);
 
     /*
-     * Clear any previous runtime authentication
-     * token and cryptographic keys before starting
-     * a new login attempt.
+     * Clear previous runtime authentication
+     * and cryptographic state.
      */
     setAuthToken(null);
     setRuntimeKeys(null);
@@ -429,6 +435,13 @@ function App() {
     setFileList([]);
     setFileListStatus("");
     setFileListError("");
+
+    /*
+     * Clear previous download state.
+     */
+    setDownloadingFileId(null);
+    setDownloadStatus("");
+    setDownloadError("");
 
     try {
       /*
@@ -481,15 +494,6 @@ function App() {
        * ------------------------------------------------
        * Validate authentication token.
        * ------------------------------------------------
-       *
-       * IMPORTANT:
-       *
-       * authController.js returns authToken at the
-       * top level of the response:
-       *
-       * data.authToken
-       *
-       * It is NOT inside data.user.
        */
       if (
         typeof data.authToken !==
@@ -553,8 +557,7 @@ function App() {
        * Step 3:
        *
        * Keep authentication token and recovered
-       * cryptographic keys only in React runtime
-       * memory.
+       * cryptographic keys only in runtime memory.
        * ------------------------------------------------
        */
       const authenticatedToken =
@@ -576,8 +579,6 @@ function App() {
 
         /*
          * Public key is not secret.
-         *
-         * It will be needed later for sharing.
          */
         mlKemPublicKey:
           data.user.mlKemPublicKey,
@@ -592,20 +593,15 @@ function App() {
       );
 
       /*
-       * Do not keep the plaintext password
+       * Do not keep plaintext password
        * in component state after successful
        * recovery.
        */
       setLoginPassword("");
 
       /*
-       * Load the authenticated user's encrypted
+       * Load authenticated user's encrypted
        * file references.
-       *
-       * IMPORTANT:
-       *
-       * We pass authenticatedToken directly
-       * because React state updates are asynchronous.
        */
       await loadFileList(
         authenticatedToken
@@ -638,9 +634,6 @@ function App() {
     const file =
       event.target.files?.[0];
 
-    /*
-     * Clear previous upload state.
-     */
     setUploadStatus("");
     setUploadError("");
     setUploadResult(null);
@@ -652,8 +645,7 @@ function App() {
 
     /*
      * Validate V1 size limit before
-     * performing expensive browser-side
-     * encryption.
+     * expensive browser-side encryption.
      */
     if (
       file.size >
@@ -665,10 +657,6 @@ function App() {
         "File exceeds the V1 maximum size of 100 MB."
       );
 
-      /*
-       * Reset the input so the same file can
-       * be selected again after correction.
-       */
       event.target.value = "";
 
       return;
@@ -744,34 +732,6 @@ function App() {
         "Encrypting file and metadata locally..."
       );
 
-      /*
-       * IMPORTANT:
-       *
-       * This function performs:
-       *
-       * File
-       *   ↓
-       * AES-256-GCM
-       *   ↓
-       * ciphertext
-       *
-       * Metadata
-       *   ↓
-       * AES-256-GCM
-       *   ↓
-       * encrypted metadata
-       *
-       * Master Key
-       *   ↓
-       * HKDF
-       *   ↓
-       * wrapping keys
-       *
-       * Nothing plaintext is sent to the backend.
-       *
-       * Authentication is supplied separately
-       * through authToken.
-       */
       const result =
         await uploadEncryptedFile({
           file: selectedFile,
@@ -791,15 +751,8 @@ function App() {
         "File encrypted in the browser and uploaded successfully."
       );
 
-      /*
-       * Keep the selected File object available
-       * only for the current UI session.
-       */
       setSelectedFile(null);
 
-      /*
-       * Reset the file input.
-       */
       const input =
         document.getElementById(
           "fileUpload"
@@ -809,10 +762,6 @@ function App() {
         input.value = "";
       }
 
-      /*
-       * Refresh encrypted file list using
-       * the authenticated runtime token.
-       */
       await loadFileList();
     } catch (err) {
       console.error(
@@ -826,6 +775,202 @@ function App() {
       );
     } finally {
       setIsUploading(false);
+    }
+  }
+
+  /*
+   * ----------------------------------------------------
+   * Download and decrypt file
+   * ----------------------------------------------------
+   *
+   * Complete V1 owner retrieval flow:
+   *
+   * Authenticated request
+   *       ↓
+   * Encrypted package
+   *       ↓
+   * Master Key
+   *       ↓
+   * Unwrap Owner FEK
+   *       ↓
+   * AES-256-GCM decrypt
+   *       ↓
+   * Decrypt metadata
+   *       ↓
+   * Browser download
+   *
+   * No plaintext is sent back to the server.
+   */
+  async function handleFileDownload(
+    fileId
+  ) {
+    setDownloadStatus("");
+    setDownloadError("");
+
+    if (
+      typeof fileId !== "string" ||
+      fileId.length === 0
+    ) {
+      setDownloadError(
+        "File ID is required."
+      );
+
+      return;
+    }
+
+    if (
+      typeof authToken !== "string" ||
+      authToken.length === 0
+    ) {
+      setDownloadError(
+        "Authenticated session is unavailable."
+      );
+
+      return;
+    }
+
+    if (!runtimeKeys) {
+      setDownloadError(
+        "Cryptographic keys are unavailable."
+      );
+
+      return;
+    }
+
+    if (
+      !(
+        runtimeKeys.masterKey instanceof
+        Uint8Array
+      )
+    ) {
+      setDownloadError(
+        "Master Key is unavailable."
+      );
+
+      return;
+    }
+
+    setDownloadingFileId(fileId);
+
+    try {
+      setDownloadStatus(
+        "Retrieving encrypted file..."
+      );
+
+      /*
+       * ------------------------------------------------
+       * Retrieve encrypted package and decrypt it
+       * entirely inside the browser.
+       * ------------------------------------------------
+       */
+      const result =
+        await downloadAndDecryptFile({
+          fileId,
+
+          authToken,
+
+          masterKey:
+            runtimeKeys.masterKey,
+
+          apiBaseUrl:
+            API_BASE_URL,
+        });
+
+      /*
+       * ------------------------------------------------
+       * Verify recovered plaintext size against
+       * authenticated encrypted metadata.
+       *
+       * AES-GCM protects the ciphertext and metadata
+       * independently. This consistency check makes
+       * sure the recovered plaintext matches the
+       * declared encrypted metadata size.
+       * ------------------------------------------------
+       */
+      if (
+        result.plaintext.length !==
+        result.metadata.size
+      ) {
+        throw new Error(
+          "Recovered file size does not match its protected metadata."
+        );
+      }
+
+      /*
+       * ------------------------------------------------
+       * Create a temporary browser Blob.
+       *
+       * This remains entirely client-side.
+       * ------------------------------------------------
+       */
+      const blob =
+        new Blob(
+          [result.plaintext],
+          {
+            type:
+              result.metadata.type,
+          }
+        );
+
+      const objectUrl =
+        URL.createObjectURL(blob);
+
+      /*
+       * ------------------------------------------------
+       * Trigger browser download.
+       * ------------------------------------------------
+       */
+      const anchor =
+        document.createElement(
+          "a"
+        );
+
+      anchor.href =
+        objectUrl;
+
+      anchor.download =
+        result.metadata.name;
+
+      document.body.appendChild(
+        anchor
+      );
+
+      anchor.click();
+
+      anchor.remove();
+
+      /*
+       * Release the temporary object URL.
+       */
+      URL.revokeObjectURL(
+        objectUrl
+      );
+
+      /*
+       * ------------------------------------------------
+       * Clear references to plaintext as far as
+       * practical by allowing the local result/Blob
+       * references to leave scope.
+       *
+       * No plaintext file is stored in browser
+       * persistence.
+       * ------------------------------------------------
+       */
+      setDownloadStatus(
+        `File decrypted successfully: ${result.metadata.name}`
+      );
+    } catch (err) {
+      console.error(
+        "File download/decryption failed:",
+        err
+      );
+
+      setDownloadError(
+        err.message ||
+          "File download and decryption failed."
+      );
+    } finally {
+      setDownloadingFileId(null);
     }
   }
 
@@ -848,7 +993,7 @@ function App() {
     setLoginPassword("");
 
     /*
-     * Clear upload-related state.
+     * Clear upload state.
      */
     setSelectedFile(null);
     setUploadStatus("");
@@ -863,7 +1008,14 @@ function App() {
     setFileListError("");
 
     /*
-     * Reset file input if present.
+     * Clear download state.
+     */
+    setDownloadingFileId(null);
+    setDownloadStatus("");
+    setDownloadError("");
+
+    /*
+     * Reset file input.
      */
     const input =
       document.getElementById(
@@ -1455,6 +1607,18 @@ function App() {
                         </div>
                       )}
 
+                      {downloadError && (
+                        <div className="alert alert-danger small">
+                          {downloadError}
+                        </div>
+                      )}
+
+                      {downloadStatus && (
+                        <div className="alert alert-success small">
+                          {downloadStatus}
+                        </div>
+                      )}
+
                       {isLoadingFiles &&
                         fileList.length ===
                           0 && (
@@ -1493,52 +1657,84 @@ function App() {
                       {fileList.length > 0 && (
                         <div className="list-group">
                           {fileList.map(
-                            (file) => (
-                              <div
-                                key={String(
+                            (file) => {
+                              const fileId =
+                                String(
                                   file.id
-                                )}
-                                className="list-group-item"
-                              >
-                                <div className="d-flex justify-content-between align-items-start">
-                                  <div>
-                                    <div className="fw-semibold">
-                                      Encrypted
-                                      File
-                                    </div>
+                                );
 
-                                    <div className="small text-secondary">
-                                      File ID:{" "}
-                                      <code>
-                                        {String(
-                                          file.id
-                                        )}
-                                      </code>
-                                    </div>
+                              const isDownloading =
+                                downloadingFileId ===
+                                fileId;
 
-                                    <div className="small text-secondary">
-                                      Version:{" "}
-                                      {
-                                        file.keyVersion
-                                      }
-                                    </div>
-
-                                    {file.createdAt && (
-                                      <div className="small text-secondary">
-                                        Uploaded:{" "}
-                                        {new Date(
-                                          file.createdAt
-                                        ).toLocaleString()}
+                              return (
+                                <div
+                                  key={
+                                    fileId
+                                  }
+                                  className="list-group-item"
+                                >
+                                  <div className="d-flex justify-content-between align-items-start gap-3">
+                                    <div>
+                                      <div className="fw-semibold">
+                                        Encrypted
+                                        File
                                       </div>
-                                    )}
-                                  </div>
 
-                                  <span className="badge text-bg-success">
-                                    Encrypted
-                                  </span>
+                                      <div className="small text-secondary">
+                                        File ID:{" "}
+                                        <code>
+                                          {
+                                            fileId
+                                          }
+                                        </code>
+                                      </div>
+
+                                      <div className="small text-secondary">
+                                        Version:{" "}
+                                        {
+                                          file.keyVersion
+                                        }
+                                      </div>
+
+                                      {file.createdAt && (
+                                        <div className="small text-secondary">
+                                          Uploaded:{" "}
+                                          {new Date(
+                                            file.createdAt
+                                          ).toLocaleString()}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    <div className="d-flex flex-column align-items-end gap-2">
+                                      <span className="badge text-bg-success">
+                                        Encrypted
+                                      </span>
+
+                                      <button
+                                        type="button"
+                                        className="btn btn-primary btn-sm"
+                                        onClick={() =>
+                                          handleFileDownload(
+                                            fileId
+                                          )
+                                        }
+                                        disabled={
+                                          downloadingFileId !==
+                                            null ||
+                                          isUploading
+                                        }
+                                      >
+                                        {isDownloading
+                                          ? "Decrypting..."
+                                          : "Decrypt & Download"}
+                                      </button>
+                                    </div>
+                                  </div>
                                 </div>
-                              </div>
-                            )
+                              );
+                            }
                           )}
                         </div>
                       )}
@@ -1550,9 +1746,9 @@ function App() {
                         The server does not receive
                         the plaintext filename,
                         MIME type, or original file
-                        contents. These will be
-                        recovered from encrypted
-                        metadata inside the browser.
+                        contents. These are recovered
+                        from encrypted metadata inside
+                        the browser during decryption.
                       </div>
                     </div>
                   </div>
@@ -1563,8 +1759,9 @@ function App() {
 
               <p className="small text-secondary mb-0">
                 Current stage: authenticated
-                encrypted file listing and
-                browser-side encrypted storage.
+                encrypted storage with
+                browser-side file retrieval and
+                decryption.
               </p>
 
             </div>
