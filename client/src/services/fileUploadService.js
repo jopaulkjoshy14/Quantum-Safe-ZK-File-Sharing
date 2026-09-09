@@ -29,13 +29,14 @@ import {
  *
  * {
  *   file,
- *   ownerId,
- *   masterKey
+ *   authToken,
+ *   masterKey,
+ *   apiBaseUrl
  * }
  */
 export async function uploadEncryptedFile({
   file,
-  ownerId,
+  authToken,
   masterKey,
   apiBaseUrl,
 }) {
@@ -46,11 +47,11 @@ export async function uploadEncryptedFile({
   }
 
   if (
-    typeof ownerId !== "string" ||
-    ownerId.length === 0
+    typeof authToken !== "string" ||
+    authToken.length === 0
   ) {
     throw new Error(
-      "Owner ID is required."
+      "Authenticated session is required."
     );
   }
 
@@ -101,7 +102,9 @@ export async function uploadEncryptedFile({
    */
   const metadata = {
     name: file.name,
-    type: file.type || "application/octet-stream",
+    type:
+      file.type ||
+      "application/octet-stream",
     size: file.size,
   };
 
@@ -162,12 +165,17 @@ export async function uploadEncryptedFile({
    * 5. Prepare API payload
    * ----------------------------------------------------
    *
+   * IMPORTANT:
+   *
+   * ownerId is intentionally NOT included.
+   *
+   * The backend derives the authenticated owner
+   * identity from the verified Bearer token.
+   *
    * Binary values are converted to Base64 because
    * the current V1 endpoint accepts JSON.
    */
   const payload = {
-    ownerId,
-
     encryptedData:
       bytesToBase64(
         encryptedData
@@ -197,6 +205,9 @@ export async function uploadEncryptedFile({
    * ----------------------------------------------------
    * 6. Send ONLY encrypted/protected material
    * ----------------------------------------------------
+   *
+   * Authentication is supplied separately through
+   * the Authorization header.
    */
   const response =
     await fetch(
@@ -207,6 +218,9 @@ export async function uploadEncryptedFile({
         headers: {
           "Content-Type":
             "application/json",
+
+          Authorization:
+            `Bearer ${authToken}`,
         },
 
         body:
@@ -238,7 +252,7 @@ export async function uploadEncryptedFile({
     /*
      * Useful for debugging/testing.
      *
-     * These are returned only to the current
+     * These values remain only in the current
      * browser runtime and are NOT sent back
      * to the server.
      */
