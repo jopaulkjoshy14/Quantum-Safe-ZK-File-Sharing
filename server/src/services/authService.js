@@ -399,7 +399,7 @@ export async function loginUser({
   }
 
   /*
-   * Authentication is now established independently
+   * Authentication is established independently
    * from the user's cryptographic keys.
    *
    * The token identifies the authenticated account.
