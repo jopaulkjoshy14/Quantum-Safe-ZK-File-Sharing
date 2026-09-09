@@ -1,8 +1,11 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
+
 import { env } from "./config/env.js";
+
 import authRoutes from "./routes/authRoutes.js";
+import fileRoutes from "./routes/fileRoutes.js";
 
 const app = express();
 
@@ -10,7 +13,9 @@ app.disable("x-powered-by");
 
 app.use(
   helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginResourcePolicy: {
+      policy: "cross-origin",
+    },
   })
 );
 
@@ -20,7 +25,11 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: "1mb" }));
+app.use(
+  express.json({
+    limit: "1mb",
+  })
+);
 
 app.get("/api/health", (_req, res) => {
   res.json({
@@ -29,6 +38,28 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-app.use("/api/auth", authRoutes);
+/*
+ * Authentication routes
+ *
+ * POST /api/auth/register
+ * POST /api/auth/login
+ */
+app.use(
+  "/api/auth",
+  authRoutes
+);
+
+/*
+ * File routes
+ *
+ * POST /api/files/upload
+ *
+ * The frontend sends encrypted file data.
+ * The backend stores the ciphertext in GridFS.
+ */
+app.use(
+  "/api/files",
+  fileRoutes
+);
 
 export default app;
