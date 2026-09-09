@@ -345,6 +345,14 @@ export async function uploadFile(
         gridFsFileId:
           gridFsFileId.toString(),
 
+        /*
+         * Store the AES-GCM file IV.
+         *
+         * The IV is not secret, but it is required
+         * to decrypt the ciphertext later.
+         */
+        fileIV,
+
         encryptedMetadata,
         metadataIV,
         wrappedMetadataKey,
