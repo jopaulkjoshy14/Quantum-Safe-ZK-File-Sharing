@@ -78,6 +78,25 @@ function App() {
 
   /*
    * ----------------------------------------------------
+   * Runtime-only authentication state
+   * ----------------------------------------------------
+   *
+   * The authentication token exists only in React
+   * runtime memory.
+   *
+   * It is deliberately NOT stored in:
+   * - localStorage
+   * - sessionStorage
+   * - cookies
+   * - IndexedDB
+   */
+  const [
+    authToken,
+    setAuthToken,
+  ] = useState(null);
+
+  /*
+   * ----------------------------------------------------
    * Runtime-only cryptographic state
    * ----------------------------------------------------
    *
@@ -286,13 +305,21 @@ function App() {
    *
    * Those values will be decrypted locally
    * in the next stage.
+   *
+   * The authentication token is sent through the
+   * Authorization header.
+   *
+   * ownerId is deliberately NOT sent.
    */
   async function loadFileList(
-    ownerId
+    tokenOverride = null
   ) {
+    const token =
+      tokenOverride || authToken;
+
     if (
-      typeof ownerId !== "string" ||
-      ownerId.length === 0
+      typeof token !== "string" ||
+      token.length === 0
     ) {
       return;
     }
@@ -307,9 +334,13 @@ function App() {
     try {
       const response =
         await fetch(
-          `${API_BASE_URL}/files?ownerId=${encodeURIComponent(
-            ownerId
-          )}`
+          `${API_BASE_URL}/files`,
+          {
+            headers: {
+              Authorization:
+                `Bearer ${token}`,
+            },
+          }
         );
 
       let data;
@@ -378,9 +409,11 @@ function App() {
     setIsLoggingIn(true);
 
     /*
-     * Clear any previous runtime keys before
-     * starting a new login attempt.
+     * Clear any previous runtime authentication
+     * token and cryptographic keys before starting
+     * a new login attempt.
      */
+    setAuthToken(null);
     setRuntimeKeys(null);
     setCurrentUser(null);
 
@@ -401,9 +434,11 @@ function App() {
 
     try {
       /*
+       * ------------------------------------------------
        * Step 1:
        *
        * Authenticate with the backend.
+       * ------------------------------------------------
        */
       const response =
         await fetch(
@@ -437,10 +472,27 @@ function App() {
       }
 
       /*
+       * ------------------------------------------------
+       * Validate authentication token.
+       * ------------------------------------------------
+       */
+      if (
+        typeof data.user?.authToken !==
+          "string" ||
+        data.user.authToken.length === 0
+      ) {
+        throw new Error(
+          "Authentication token was not returned by the server."
+        );
+      }
+
+      /*
+       * ------------------------------------------------
        * Step 2:
        *
        * Recover the Master Key and ML-KEM
        * private key entirely inside the browser.
+       * ------------------------------------------------
        */
       const recoveredKeys =
         await recoverLoginKeys({
@@ -468,11 +520,21 @@ function App() {
         });
 
       /*
+       * ------------------------------------------------
        * Step 3:
        *
-       * Keep recovered keys only in
-       * React runtime memory.
+       * Keep authentication token and recovered
+       * cryptographic keys only in React runtime
+       * memory.
+       * ------------------------------------------------
        */
+      const authenticatedToken =
+        data.user.authToken;
+
+      setAuthToken(
+        authenticatedToken
+      );
+
       setRuntimeKeys(
         recoveredKeys
       );
@@ -508,18 +570,26 @@ function App() {
       setLoginPassword("");
 
       /*
-       * Load Alice's encrypted file references.
+       * Load the authenticated user's encrypted
+       * file references.
        *
-       * This does NOT decrypt anything.
+       * IMPORTANT:
+       *
+       * We pass authenticatedToken directly
+       * because React state updates are asynchronous.
        */
       await loadFileList(
-        loggedInUser.id
+        authenticatedToken
       );
     } catch (err) {
       console.error(
         "Login failed:",
         err
       );
+
+      setAuthToken(null);
+      setRuntimeKeys(null);
+      setCurrentUser(null);
 
       setLoginError(
         err.message ||
@@ -606,6 +676,17 @@ function App() {
       return;
     }
 
+    if (
+      typeof authToken !== "string" ||
+      authToken.length === 0
+    ) {
+      setUploadError(
+        "Authenticated session is unavailable."
+      );
+
+      return;
+    }
+
     if (!runtimeKeys) {
       setUploadError(
         "Cryptographic keys are not available."
@@ -658,16 +739,18 @@ function App() {
        * wrapping keys
        *
        * Nothing plaintext is sent to the backend.
+       *
+       * Authentication is supplied separately
+       * through authToken.
        */
       const result =
         await uploadEncryptedFile({
           file: selectedFile,
 
-          ownerId:
-            currentUser.id,
-
           masterKey:
             runtimeKeys.masterKey,
+
+          authToken,
 
           apiBaseUrl:
             API_BASE_URL,
@@ -698,11 +781,10 @@ function App() {
       }
 
       /*
-       * Refresh encrypted file list.
+       * Refresh encrypted file list using
+       * the authenticated runtime token.
        */
-      await loadFileList(
-        currentUser.id
-      );
+      await loadFileList();
     } catch (err) {
       console.error(
         "Encrypted file upload failed:",
@@ -725,9 +807,11 @@ function App() {
    */
   function handleLogout() {
     /*
-     * Remove cryptographic material from
-     * React runtime state.
+     * Remove authentication token and
+     * cryptographic material from React
+     * runtime state.
      */
+    setAuthToken(null);
     setRuntimeKeys(null);
     setCurrentUser(null);
 
@@ -762,7 +846,7 @@ function App() {
     }
 
     setLoginStatus(
-      "Logged out. Runtime cryptographic keys cleared."
+      "Logged out. Authentication token and runtime cryptographic keys cleared."
     );
 
     setLoginError("");
@@ -1031,10 +1115,9 @@ function App() {
                     </p>
 
                     <p className="small mb-3">
+                      Authentication token,
                       Master Key and
                       ML-KEM-768 private key
-                      have been recovered
-                      inside the browser and
                       are currently held only
                       in runtime memory.
                     </p>
@@ -1046,7 +1129,7 @@ function App() {
                         handleLogout
                       }
                     >
-                      Logout & Clear Keys
+                      Logout & Clear Session
                     </button>
                   </div>
 
@@ -1102,6 +1185,15 @@ function App() {
                           <li>
                             Keys persisted to
                             browser storage:{" "}
+                            <strong>
+                              No
+                            </strong>
+                          </li>
+
+                          <li>
+                            Authentication token
+                            persisted to browser
+                            storage:{" "}
                             <strong>
                               No
                             </strong>
@@ -1299,9 +1391,9 @@ function App() {
 
                           <p className="text-secondary small mb-0">
                             File references are
-                            retrieved from the
-                            server. Sensitive
-                            metadata remains
+                            retrieved using your
+                            authenticated session.
+                            Sensitive metadata remains
                             encrypted.
                           </p>
                         </div>
@@ -1309,10 +1401,8 @@ function App() {
                         <button
                           type="button"
                           className="btn btn-outline-secondary btn-sm"
-                          onClick={() =>
-                            loadFileList(
-                              currentUser.id
-                            )
+                          onClick={
+                            loadFileList
                           }
                           disabled={
                             isLoadingFiles
@@ -1345,6 +1435,7 @@ function App() {
                               role="status"
                               aria-hidden="true"
                             />
+
                             <span className="ms-2 small">
                               Loading encrypted
                               files...
@@ -1424,7 +1515,9 @@ function App() {
                       )}
 
                       <div className="alert alert-secondary small mt-3 mb-0">
-                        <strong>Privacy:</strong>{" "}
+                        <strong>
+                          Privacy:
+                        </strong>{" "}
                         The server does not receive
                         the plaintext filename,
                         MIME type, or original file
@@ -1440,9 +1533,9 @@ function App() {
               <hr />
 
               <p className="small text-secondary mb-0">
-                Current stage: encrypted file
-                listing and browser-side encrypted
-                storage.
+                Current stage: authenticated
+                encrypted file listing and
+                browser-side encrypted storage.
               </p>
 
             </div>
