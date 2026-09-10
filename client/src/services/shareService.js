@@ -122,6 +122,7 @@ export async function createFileShare({
   masterKey,
   apiBaseUrl,
   senderId,
+  onProgress,
 }) {
   validateMasterKey(masterKey);
 
@@ -140,6 +141,7 @@ export async function createFileShare({
     throw new Error("Recipient public-key data is invalid.");
   }
 
+  onProgress?.({ id: "lookup" });
   const keyMaterial = await getOwnerKeyMaterial({
     fileId,
     authToken,
@@ -158,6 +160,7 @@ export async function createFileShare({
     keyMaterial.metadataKeyIV
   );
 
+  onProgress?.({ id: "kem" });
   const recipientPublicKey =
     base64ToBytes(recipient.mlKemPublicKey);
 
@@ -166,6 +169,7 @@ export async function createFileShare({
       recipientPublicKey
     );
 
+  onProgress?.({ id: "secret" });
   const wrappingKey =
     await deriveShareWrappingKey(
       sharedSecret,
@@ -174,6 +178,7 @@ export async function createFileShare({
       recipient.id
     );
 
+  onProgress?.({ id: "derive" });
   const {
     ciphertext: wrappedFEK,
     iv: wrapIV,
@@ -190,6 +195,7 @@ export async function createFileShare({
     metadataKey
   );
 
+  onProgress?.({ id: "wrap" });
   const response = await fetch(
     `${apiBaseUrl}/shares/files/${encodeURIComponent(fileId)}`,
     {
@@ -211,10 +217,13 @@ export async function createFileShare({
     }
   );
 
-  return parseResponse(
+  onProgress?.({ id: "send" });
+  const parsed = await parseResponse(
     response,
     "Unable to create file share."
   );
+  onProgress?.({ id: "record" });
+  return parsed;
 }
 
 export async function listReceivedShares({
@@ -286,6 +295,7 @@ export async function downloadAndDecryptSharedFile({
   masterKey,
   mlKemPrivateKey,
   apiBaseUrl,
+  onProgress,
 }) {
   validateMasterKey(masterKey);
 
@@ -296,6 +306,7 @@ export async function downloadAndDecryptSharedFile({
     throw new Error("ML-KEM private key is unavailable.");
   }
 
+  onProgress?.({ id: "retrieve" });
   const response = await fetch(
     `${apiBaseUrl}/shares/${encodeURIComponent(shareId)}/download`,
     {
@@ -323,12 +334,14 @@ export async function downloadAndDecryptSharedFile({
   const kemCiphertext =
     base64ToBytes(file.kemCiphertext);
 
+  onProgress?.({ id: "decap" });
   const sharedSecret =
     decapsulateSharedSecret(
       kemCiphertext,
       mlKemPrivateKey
     );
 
+  onProgress?.({ id: "derive" });
   const wrappingKey =
     await deriveShareWrappingKey(
       sharedSecret,
@@ -338,6 +351,7 @@ export async function downloadAndDecryptSharedFile({
       String(file.recipientId)
     );
 
+  onProgress?.({ id: "unwrap" });
   const fek = await unwrapSharedFEK(
     wrappingKey,
     file.wrappedFEK,
@@ -351,12 +365,14 @@ export async function downloadAndDecryptSharedFile({
       file.metadataKeyIV
     );
 
+  onProgress?.({ id: "decrypt" });
   const plaintext = await decryptFile(
     base64ToBytes(file.encryptedData),
     fek,
     base64ToBytes(file.fileIV)
   );
 
+  onProgress?.({ id: "metadata" });
   const metadata = await decryptMetadata(
     file.encryptedMetadata,
     metadataKey,
@@ -379,6 +395,8 @@ export async function downloadAndDecryptSharedFile({
       "Recovered file size does not match its protected metadata."
     );
   }
+
+  onProgress?.({ id: "reconstruct" });
 
   return {
     plaintext,

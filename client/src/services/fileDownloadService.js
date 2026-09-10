@@ -50,6 +50,7 @@ export async function downloadAndDecryptFile({
   authToken,
   masterKey,
   apiBaseUrl,
+  onProgress,
 }) {
   /*
    * ----------------------------------------------------
@@ -108,6 +109,7 @@ export async function downloadAndDecryptFile({
    * The server independently determines ownership
    * from the authenticated identity.
    */
+  onProgress?.({ id: "auth" });
   const response =
     await fetch(
       `${apiBaseUrl}/files/${encodeURIComponent(
@@ -245,6 +247,8 @@ export async function downloadAndDecryptFile({
    * Decode encrypted file ciphertext
    * ----------------------------------------------------
    */
+  onProgress?.({ id: "retrieve" });
+
   let encryptedData;
   let fileIV;
 
@@ -263,6 +267,8 @@ export async function downloadAndDecryptFile({
       "Encrypted file transport data is invalid."
     );
   }
+
+  onProgress?.({ id: "fek" });
 
   /*
    * ----------------------------------------------------
@@ -300,6 +306,8 @@ export async function downloadAndDecryptFile({
    * The plaintext exists only in browser memory
    * during this operation.
    */
+  onProgress?.({ id: "decrypt" });
+
   const plaintext =
     await decryptFile(
       encryptedData,
@@ -322,6 +330,8 @@ export async function downloadAndDecryptFile({
    *     ↓
    * Metadata Key
    */
+  onProgress?.({ id: "metadata" });
+
   const metadataKey =
     await unwrapMetadataKey(
       masterKey,
@@ -334,6 +344,8 @@ export async function downloadAndDecryptFile({
    * Decrypt metadata
    * ----------------------------------------------------
    */
+  onProgress?.({ id: "metadata-decrypt" });
+
   const metadata =
     await decryptMetadata(
       encryptedFile.encryptedMetadata,
@@ -392,6 +404,8 @@ export async function downloadAndDecryptFile({
    *
    * No decrypted data is persisted here.
    */
+  onProgress?.({ id: "reconstruct" });
+
   return {
     fileId:
       encryptedFile.id,

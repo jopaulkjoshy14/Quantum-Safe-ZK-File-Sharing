@@ -39,6 +39,7 @@ export async function uploadEncryptedFile({
   authToken,
   masterKey,
   apiBaseUrl,
+  onProgress,
 }) {
   if (!(file instanceof File)) {
     throw new Error(
@@ -86,6 +87,7 @@ export async function uploadEncryptedFile({
    * A fresh random FEK is generated internally
    * by encryptFile().
    */
+  onProgress?.({ id: "key" });
   const {
     encryptedData,
     fek,
@@ -100,6 +102,8 @@ export async function uploadEncryptedFile({
    * Metadata is intentionally kept separate from
    * the file encryption key.
    */
+  onProgress?.({ id: "encrypt" });
+
   const metadata = {
     name: file.name,
     type:
@@ -107,6 +111,8 @@ export async function uploadEncryptedFile({
       "application/octet-stream",
     size: file.size,
   };
+
+  onProgress?.({ id: "metadata" });
 
   const {
     metadataKey,
@@ -129,6 +135,8 @@ export async function uploadEncryptedFile({
    *     ↓
    * wrappedMetadataKey
    */
+  onProgress?.({ id: "protect-meta" });
+
   const {
     wrappedMetadataKey,
     metadataKeyIV,
@@ -152,6 +160,8 @@ export async function uploadEncryptedFile({
    *     ↓
    * wrappedOwnerFEK
    */
+  onProgress?.({ id: "protect-fek" });
+
   const {
     wrappedFEK: wrappedOwnerFEK,
     ownerFEKIV,
@@ -175,6 +185,8 @@ export async function uploadEncryptedFile({
    * Binary values are converted to Base64 because
    * the current V1 endpoint accepts JSON.
    */
+  onProgress?.({ id: "package" });
+
   const payload = {
     encryptedData:
       bytesToBase64(
@@ -209,6 +221,8 @@ export async function uploadEncryptedFile({
    * Authentication is supplied separately through
    * the Authorization header.
    */
+  onProgress?.({ id: "upload" });
+
   const response =
     await fetch(
       `${apiBaseUrl}/files/upload`,
@@ -245,6 +259,8 @@ export async function uploadEncryptedFile({
       "Encrypted file upload failed."
     );
   }
+
+  onProgress?.({ id: "gridfs" });
 
   return {
     ...result,
