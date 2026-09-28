@@ -785,3 +785,330 @@ td {
     --bs-gutter-y: 1rem;
   }
 }
+
+
+/* =========================================================
+   Readability and status color refinement
+   ========================================================= */
+
+body {
+  font-size: 15px;
+}
+
+.page-intro p,
+.welcome-row p,
+.about-hero p,
+.about-section p,
+.quick-card p {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.form-heading p,
+.modern-form label {
+  font-size: 13px;
+}
+
+.form-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 13px 15px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.55;
+  box-shadow: 0 4px 12px rgba(24, 48, 38, .045);
+}
+
+.form-alert::before {
+  display: grid;
+  place-items: center;
+  flex: 0 0 20px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.form-alert.danger {
+  color: #853d47;
+  background: #fff2f3;
+  border: 1px solid #f1cbd0;
+  border-left: 4px solid #d65b68;
+}
+
+.form-alert.danger::before {
+  content: "!";
+  color: #fff;
+  background: #d65b68;
+}
+
+.form-alert.success {
+  color: #256448;
+  background: #eaf7f0;
+  border: 1px solid #c5e8d3;
+  border-left: 4px solid #39a878;
+}
+
+/* The vault and share rows are the app's table views. */
+.vault-row,
+.share-row,
+.received-row {
+  transition: background-color .18s ease, border-color .18s ease;
+}
+
+.vault-row {
+  padding: 16px 12px;
+  margin: 0 -12px;
+  border-radius: 10px;
+}
+
+.vault-row:hover,
+.share-row:hover,
+.received-row:hover {
+  background: #f1f8f4;
+}
+
+.vault-file strong,
+.share-row strong,
+.received-row strong {
+  font-size: 13px;
+  color: #263b32;
+}
+
+.vault-file small,
+.share-row small,
+.received-row small {
+  font-size: 11px;
+  color: #718078;
+  line-height: 1.45;
+}
+
+.vault-meta span {
+  font-size: 10px;
+  color: #77877f;
+}
+
+.vault-meta strong {
+  font-size: 12px;
+  color: #334a3e;
+}
+
+.vault-status,
+.share-status {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 6px 9px;
+  border: 1px solid #cce8d6;
+  border-radius: 999px;
+  background: #eaf7ef;
+  color: #28734f;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.vault-status i,
+.share-status i {
+  width: 7px;
+  height: 7px;
+  background: #35a66f;
+  box-shadow: 0 0 0 3px rgba(53, 166, 111, .12);
+}
+
+.vault-actions button,
+.danger-btn,
+.primary-mini {
+  font-size: 12px;
+  padding: 8px 10px;
+}
+
+.danger-btn {
+  background: #fff0f1;
+  border-color: #f0c9ce;
+  color: #a64250;
+}
+
+.danger-btn:hover {
+  background: #ffe4e7;
+}
+
+/* Make the key-distribution pipeline easier to scan. */
+.operation-live {
+  color: #a9d9c1;
+  font-size: 10px;
+}
+
+.operation-head strong {
+  font-size: 17px;
+}
+
+.operation-head small {
+  font-size: 11px;
+  color: #9bb8ad;
+}
+
+.pipeline-step {
+  min-height: 62px;
+}
+
+.pipeline-step > span {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #42695c;
+  background: #203e4b;
+  color: #b4d6df;
+  font-size: 10px;
+}
+
+.pipeline-step.done > span {
+  border-color: #4e9c76;
+  background: #287653;
+  color: #e4f7ea;
+}
+
+.pipeline-step strong {
+  color: #e2eee8;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.pipeline-step.done strong {
+  color: #c9efd5;
+}
+
+.pipeline-step small {
+  color: #a0b6ad;
+  font-size: 10px;
+}
+
+.pipeline-step.done small {
+  color: #83d2a3;
+}
+
+.connector {
+  left: 13px;
+  top: 28px;
+  height: 34px;
+  border-color: #4c7182;
+}
+
+.connector.done {
+  border-color: #50a779;
+}
+
+.operation-foot {
+  color: #a3c2b6;
+  font-size: 10px;
+}
+
+.arch-flow > div:not(.arch-split) {
+  padding: 12px;
+  background: linear-gradient(110deg, #eff8f2, #edf6fa);
+  border-color: #d5e8dd;
+  color: #315f4a;
+  font-size: 12px;
+}
+
+.arch-flow > i {
+  color: #54a77a;
+  font-size: 14px;
+}
+
+.arch-split span {
+  background: #eaf5ef;
+  color: #356b50;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.security-line strong,
+.trust-list b {
+  font-size: 12px;
+}
+
+.security-line small,
+.trust-list span {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.limitation-banner strong {
+  font-size: 12px;
+}
+
+.limitation-banner p {
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.tech-grid span {
+  font-size: 10px;
+}
+
+.stat-card strong {
+  font-size: 16px;
+}
+
+.stat-card small,
+.mini-file small,
+.activity-copy span,
+.upload-submit small {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.mini-file strong,
+.activity-copy strong,
+.upload-submit strong {
+  font-size: 13px;
+}
+
+.activity-item time,
+.activity-copy small {
+  font-size: 10px;
+}
+
+.feature-banner p,
+.page-note p,
+.vault-note p,
+.revocation-note span,
+.activity-disclaimer span,
+.success-card p {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.page-note strong,
+.vault-note strong,
+.revocation-note strong,
+.activity-disclaimer strong,
+.success-card strong {
+  font-size: 13px;
+}
+
+.empty-state strong {
+  font-size: 14px;
+}
+
+.empty-state p {
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+@media (max-width: 767.98px) {
+  .vault-row {
+    padding: 14px 8px;
+    margin: 0 -8px;
+  }
+
+  .pipeline-step {
+    min-height: 62px;
+  }
+
+  .arch-split {
+    grid-template-columns: 1fr;
+  }
+}
