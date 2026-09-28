@@ -16,6 +16,11 @@ const paths = {
   users: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Zm5 8a4 4 0 0 1 4 4v2M17 3a4 4 0 0 1 0 8",
   check: "M5 12l4 4L19 6",
   refresh: "M20 7v5h-5M4 17v-5h5M5.5 8a7.5 7.5 0 0 1 12.4-3L20 8M4 16l2.1 3a7.5 7.5 0 0 0 12.4-3",
+  key: "M14 10a5 5 0 1 1-1-5 5 5 0 0 1 1 5Zm0 0 7 7v4h-4v-3h-3l-3-3M8 7h.01",
+  flow: "M9 3h6v5H9V3ZM3 16h6v5H3v-5Zm12 0h6v5h-6v-5ZM12 8v4M6 16v-4h12v4",
+  login: "M14 4h6v16h-6M3 12h12m-5-5 5 5-5 5",
+  menu: "M4 6h16M4 12h16M4 18h16",
+  close: "m6 6 12 12M6 18 18 6",
 };
 
 export default function Icon({ name }) {

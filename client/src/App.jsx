@@ -7,6 +7,7 @@ import SharingPanel from "./components/SharingPanel.jsx";
 import OperationPanel from "./components/OperationPanel.jsx";
 import Icon from "./components/Icon.jsx";
 import VaultArtwork from "./components/VaultArtwork.jsx";
+import FileFlowDiagram from "./components/FileFlowDiagram.jsx";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 const NAV_ITEMS = [
@@ -44,6 +45,7 @@ function App() {
   const [backendMessage, setBackendMessage] = useState("Checking connection...");
   const [authView, setAuthView] = useState("login");
   const [page, setPage] = useState("dashboard");
+  const [navigationOpen, setNavigationOpen] = useState(false);
 
   const [registerUsername, setRegisterUsername] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
@@ -267,6 +269,7 @@ function App() {
   }
 
   function handleLogout() {
+    setNavigationOpen(false);
     setAuthToken(null);
     setRuntimeKeys(null);
     setCurrentUser(null);
@@ -348,29 +351,43 @@ function App() {
     );
   }
 
-  const go = (next) => setPage(next);
+  const go = (next) => {
+    setPage(next);
+    setNavigationOpen(false);
+    if (navigationOpen) requestAnimationFrame(() => document.getElementById("page-title")?.focus());
+  };
   const pageTitle = NAV_ITEMS.find(([id]) => id === page)?.[1] || "Overview";
   return (
     <div className="product-shell">
       <aside className="sidebar">
-        <Brand className="sidebar-brand" />
-        <div className="nav-caption">Your workspace</div>
-        <nav aria-label="Workspace">{NAV_ITEMS.slice(0, 6).map(([id, label, icon]) => (
-          <button key={id} className={page === id ? "active" : ""} aria-current={page === id ? "page" : undefined} onClick={() => go(id)}>
-            <Icon name={icon} /><span>{label}</span>{id === "activity" && activities.length > 0 && <b>{activities.length}</b>}
-          </button>
-        ))}</nav>
-        <div className="nav-caption lower">Good to know</div>
-        <nav aria-label="System">{NAV_ITEMS.slice(6).map(([id, label, icon]) => (
-          <button key={id} className={page === id ? "active" : ""} aria-current={page === id ? "page" : undefined} onClick={() => go(id)}><Icon name={icon} /><span>{label}</span></button>
-        ))}</nav>
+        <div className="sidebar-header">
+          <Brand className="sidebar-brand" />
+          <button id="navigation-toggle" className="navigation-toggle" aria-label={navigationOpen ? "Close navigation" : "Open navigation"} aria-expanded={navigationOpen} aria-controls="workspace-navigation" onClick={() => setNavigationOpen((open) => !open)}><Icon name={navigationOpen ? "close" : "menu"} /></button>
+        </div>
+        <div id="workspace-navigation" className={`sidebar-navigation ${navigationOpen ? "is-open" : ""}`} onKeyDown={(event) => {
+          if (event.key === "Escape" && navigationOpen) {
+            setNavigationOpen(false);
+            document.getElementById("navigation-toggle")?.focus();
+          }
+        }}>
+          <div className="nav-caption">Your workspace</div>
+          <nav aria-label="Workspace">{NAV_ITEMS.slice(0, 6).map(([id, label, icon]) => (
+            <button key={id} className={page === id ? "active" : ""} aria-current={page === id ? "page" : undefined} onClick={() => go(id)}>
+              <Icon name={icon} /><span>{label}</span>{id === "activity" && activities.length > 0 && <b>{activities.length}</b>}
+            </button>
+          ))}</nav>
+          <div className="nav-caption lower">Good to know</div>
+          <nav aria-label="System">{NAV_ITEMS.slice(6).map(([id, label, icon]) => (
+            <button key={id} className={page === id ? "active" : ""} aria-current={page === id ? "page" : undefined} onClick={() => go(id)}><Icon name={icon} /><span>{label}</span></button>
+          ))}</nav>
+        </div>
         <div className="sidebar-bottom">
           <div className="sidebar-status"><i className={backendOnline ? "live" : ""} /><span>{backendOnline ? "Connected to your workspace" : "Connection unavailable"}</span></div>
           <button className="sidebar-user" onClick={handleLogout}><span className="user-avatar">{currentUser.username.slice(0, 1).toUpperCase()}</span><div><strong>{formatDisplayUsername(currentUser.username)}</strong><small>Sign out</small></div><Icon name="logout" /></button>
         </div>
       </aside>
       <main className="main-content">
-        <header className="content-topbar"><div><span className="breadcrumb">Workspace <span>/</span> {pageTitle}</span><h1>{pageTitle}</h1></div><div className="topbar-security"><Icon name="shield" /> Encrypted workspace</div></header>
+        <header className="content-topbar"><div><span className="breadcrumb">Workspace <span>/</span> {pageTitle}</span><h1 id="page-title" tabIndex={-1}>{pageTitle}</h1></div><div className="topbar-security"><Icon name="shield" /> Encrypted workspace</div></header>
         {page === "dashboard" && <Dashboard currentUser={currentUser} fileList={fileList} activities={recentActivities} backendOnline={backendOnline} onNavigate={go} />}
         {page === "upload" && <UploadPage selectedFile={selectedFile} handleFileSelect={handleFileSelect} handleFileUpload={handleFileUpload} isUploading={isUploading} uploadError={uploadError} uploadResult={uploadResult} steps={uploadSteps} />}
         {page === "files" && <FilesPage fileList={fileList} loadFileList={loadFileList} isLoadingFiles={isLoadingFiles} fileListError={fileListError} downloadError={downloadError} steps={downloadSteps} downloadingFileId={downloadingFileId} onDownload={handleFileDownload} onShare={() => go("sharing")} />}
@@ -385,7 +402,7 @@ function App() {
 }
 
 function Brand({ className }) {
-  return <div className={className}><span className="brand-symbol"><Icon name="shield" /></span><div><strong>QSZKFSS</strong><small>Private file sharing</small></div></div>;
+  return <div className={className}><img className="brand-symbol" src={`${import.meta.env.BASE_URL}brand-mark.svg`} alt="" width="46" height="46" /><div><strong>QSZKFSS</strong><small>Private file sharing</small></div></div>;
 }
 
 function Dashboard({ currentUser, fileList, activities, backendOnline, onNavigate }) {
@@ -535,7 +552,8 @@ function SecurityPage({ currentUser, runtimeKeys, backendOnline }) {
   const keysReady = runtimeKeys?.masterKey instanceof Uint8Array && runtimeKeys?.mlKemPrivateKey instanceof Uint8Array;
   return (
     <div className="page-body">
-      <div className="page-intro"><span className="section-kicker"><Icon name="shield" /> Peace of mind</span><h2>Your privacy, explained.</h2><p>A few things to know about your workspace.</p></div>
+      <div className="page-intro"><span className="section-kicker"><Icon name="shield" /> Peace of mind</span><h2>Your privacy, explained.</h2><p>See how your files move, step by step.</p></div>
+      <FileFlowDiagram />
       <div className="security-grid">
         <section className="section-card security-overview">
           <div className="security-score"><span className="security-badge"><Icon name="shield" /></span><div><span>Your session</span><strong>{keysReady ? "Protected and ready" : "Session unavailable"}</strong><small>{formatDisplayUsername(currentUser.username)} · {backendOnline ? "Connected" : "Connection unavailable"}</small></div></div>
