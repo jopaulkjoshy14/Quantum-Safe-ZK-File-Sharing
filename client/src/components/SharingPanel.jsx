@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import OperationPanel from "./OperationPanel.jsx";
+import Icon from "./Icon.jsx";
 import {
   lookupRecipient,
   createFileShare,
@@ -10,26 +11,26 @@ import {
 } from "../services/shareService.js";
 
 function formatDate(value) {
-  return value ? new Date(value).toLocaleString() : "Unknown";
+  return value ? new Date(value).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "Unknown date";
 }
 
 const SHARE_STAGES = [
-  ["lookup", "Recipient public key retrieved"],
-  ["kem", "ML-KEM-768 encapsulation performed"],
-  ["secret", "Shared secret established"],
-  ["derive", "FEK wrapping key derived"],
-  ["wrap", "FEK protected for recipient"],
-  ["send", "Protected share sent to server"],
-  ["record", "Share record created"],
+  ["lookup", "Find their account"],
+  ["kem", "Prepare secure sharing"],
+  ["secret", "Establish a shared key"],
+  ["derive", "Prepare the file key"],
+  ["wrap", "Protect the file key"],
+  ["send", "Send the share"],
+  ["record", "Save access"],
 ];
 const RECEIVE_STAGES = [
-  ["retrieve", "Authenticated shared package retrieved"],
-  ["decap", "ML-KEM-768 decapsulation performed"],
-  ["derive", "Share wrapping key derived"],
-  ["unwrap", "Recipient FEK recovered locally"],
-  ["metadata", "Encrypted metadata decrypted locally"],
-  ["decrypt", "File decrypted with AES-256-GCM"],
-  ["reconstruct", "Original file reconstructed"],
+  ["retrieve", "Get the shared file"],
+  ["decap", "Unlock shared access"],
+  ["derive", "Prepare the shared key"],
+  ["unwrap", "Unlock the file key"],
+  ["decrypt", "Decrypt the file"],
+  ["metadata", "Read file details"],
+  ["reconstruct", "Prepare download"],
 ];
 
 export default function SharingPanel({ section = "sharing", fileList, authToken, currentUser, runtimeKeys, apiBaseUrl, onActivity }) {
@@ -85,27 +86,25 @@ export default function SharingPanel({ section = "sharing", fileList, authToken,
     setShareError("");
     setShareStatus("");
     setShareSteps([]);
-    if (!selectedFileId) return setShareError("Select an encrypted file first.");
-    if (!recipientUsername.trim()) return setShareError("Enter the recipient username.");
-    if (!(runtimeKeys?.masterKey instanceof Uint8Array)) return setShareError("Master Key is unavailable.");
+    if (!selectedFileId) return setShareError("Choose a file first.");
+    if (!recipientUsername.trim()) return setShareError("Enter their username.");
+    if (!(runtimeKeys?.masterKey instanceof Uint8Array)) return setShareError("Your session is unavailable. Sign in again.");
     setIsSharing(true);
     try {
       const recipient = await lookupRecipient({ username: recipientUsername, authToken, apiBaseUrl });
-      setShareSteps((steps) => [...steps, { id: "lookup" }]);
-      const step = (id) => setShareSteps((steps) => steps.some((item) => item.id === id) ? steps : [...steps, { id }]);
+      const step = ({ id }) => setShareSteps((steps) => steps.some((item) => item.id === id) ? steps : [...steps, { id }]);
       await createFileShare({
         fileId: selectedFileId, recipient, authToken, masterKey: runtimeKeys.masterKey,
         apiBaseUrl, senderId: currentUser.id, onProgress: step,
       });
-      ["kem", "secret", "derive", "wrap", "send", "record"].forEach(step);
-      setShareStatus(`File shared securely with ${recipient.username}.`);
-      onActivity?.("SHARE", "File shared securely", `Encrypted file → ${recipient.username} · ML-KEM-768 protected key sharing`);
+      setShareStatus(`Shared with ${recipient.username}.`);
+      onActivity?.("SHARE", "File shared", `Shared with ${recipient.username}.`);
       setRecipientUsername("");
       setSelectedFileId("");
       await refreshShares();
     } catch (error) {
       setShareError(error.message || "Unable to share file.");
-      onActivity?.("SHARE", "Secure sharing failed", error.message || "The sharing operation failed.", "failed");
+      onActivity?.("SHARE", "Sharing couldn’t finish", error.message || "Try sharing the file again.", "failed");
     } finally {
       setIsSharing(false);
     }
@@ -116,7 +115,7 @@ export default function SharingPanel({ section = "sharing", fileList, authToken,
     setReceiveSteps([]);
     setDownloadingShareId(String(shareId));
     try {
-      const step = (id) => setReceiveSteps((steps) => steps.some((item) => item.id === id) ? steps : [...steps, { id }]);
+      const step = ({ id }) => setReceiveSteps((steps) => steps.some((item) => item.id === id) ? steps : [...steps, { id }]);
       const result = await downloadAndDecryptSharedFile({
         shareId: String(shareId), authToken, masterKey: runtimeKeys.masterKey,
         mlKemPrivateKey: runtimeKeys.mlKemPrivateKey, apiBaseUrl, onProgress: step,
@@ -130,10 +129,10 @@ export default function SharingPanel({ section = "sharing", fileList, authToken,
       anchor.click();
       anchor.remove();
       setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-      onActivity?.("DOWNLOAD", "Shared file decrypted locally", `${result.metadata.name} · received from ${sender || "another user"}`);
+      onActivity?.("DOWNLOAD", "Shared file downloaded", `${result.metadata.name} · From ${sender || "another user"}`);
     } catch (error) {
-      setSharedDownloadError(error.message || "Unable to decrypt shared file.");
-      onActivity?.("DOWNLOAD", "Shared download failed", error.message || "The shared-file operation failed.", "failed");
+      setSharedDownloadError(error.message || "Unable to download the shared file.");
+      onActivity?.("DOWNLOAD", "Download couldn’t finish", error.message || "Try downloading the file again.", "failed");
     } finally {
       setDownloadingShareId(null);
     }
@@ -146,11 +145,11 @@ export default function SharingPanel({ section = "sharing", fileList, authToken,
       await revokeFileShare({ shareId: String(shareId), authToken, apiBaseUrl });
       focusTarget.current = "refresh";
       setPendingRevokeId(null);
-      onActivity?.("REVOKE", "File access revoked", `Future access blocked for ${username}.`);
+      onActivity?.("REVOKE", "Access removed", `Removed access for ${username}.`);
       await refreshShares();
     } catch (error) {
-      setShareListError(error.message || "Unable to revoke share.");
-      onActivity?.("REVOKE", "Revocation failed", error.message || "The revocation operation failed.", "failed");
+      setShareListError(error.message || "Unable to remove access.");
+      onActivity?.("REVOKE", "Access couldn’t be removed", error.message || "Try removing access again.", "failed");
     } finally {
       setRevokingShareId(null);
     }
@@ -159,49 +158,47 @@ export default function SharingPanel({ section = "sharing", fileList, authToken,
   return (
     <div className="page-body sharing-page">
       <div className="page-intro">
-        <span className="section-kicker">{showingShare ? "Protected key distribution" : "Incoming access"}</span>
-        <h2>{showingShare ? "Share securely." : "Shared with me."}</h2>
-        <p>{showingShare
-          ? "Give another user access by protecting the file's encryption key with their ML-KEM-768 public key."
-          : "Download files shared with you and decrypt them privately in your browser."}</p>
+        <span className="section-kicker"><Icon name={showingShare ? "share" : "download"} />{showingShare ? "Better together" : "From your people"}</span>
+        <h2>{showingShare ? "A file worth sharing." : "Shared with you."}</h2>
+        <p>{showingShare ? "Choose a file and enter their username." : "Files people have shared with your account."}</p>
       </div>
       {showingShare ? (
         <>
           <section className="share-layout">
             <section className="section-card share-form-card">
               <div className="card-heading">
-                <div><span className="section-kicker">New share</span><h3>Protect a file for a recipient.</h3></div>
-                <span className="mini-badge">ML-KEM-768</span>
+                <h3>Send a file</h3>
+                <span className="mini-badge"><Icon name="shield" /> Encrypted</span>
               </div>
-              <form onSubmit={handleShare} className="modern-form">
+              <form onSubmit={handleShare} className="modern-form sharing-form">
                 <label>
-                  Encrypted file
-                  <select value={selectedFileId} onChange={(event) => { setSelectedFileId(event.target.value); setShareError(""); setShareStatus(""); }} disabled={isSharing || fileList.length === 0} required>
-                    <option value="">Select a file</option>
-                    {fileList.map((file) => <option key={String(file.id)} value={String(file.id)}>Encrypted file · {String(file.id).slice(0, 12)}…</option>)}
+                  Choose a file
+                  <select value={selectedFileId} onChange={(event) => { setSelectedFileId(event.target.value); setShareError(""); setShareStatus(""); setShareSteps([]); }} disabled={isSharing || fileList.length === 0} required>
+                    <option value="">{fileList.length ? "Select a file" : "Upload a file first"}</option>
+                    {fileList.map((file) => <option key={String(file.id)} value={String(file.id)}>Private file · {String(file.id).slice(-8)}</option>)}
                   </select>
                 </label>
                 <label>
-                  Recipient username
-                  <input value={recipientUsername} onChange={(event) => { setRecipientUsername(event.target.value); setShareError(""); setShareStatus(""); }} placeholder="e.g. bob" minLength={3} maxLength={50} autoComplete="off" disabled={isSharing} required />
+                  Their username
+                  <input value={recipientUsername} onChange={(event) => { setRecipientUsername(event.target.value); setShareError(""); setShareStatus(""); setShareSteps([]); }} placeholder="e.g. bob" minLength={3} maxLength={50} autoComplete="off" disabled={isSharing} required />
                 </label>
                 {shareError && <div className="form-alert danger" role="alert">{shareError}</div>}
                 {shareStatus && <div className="form-alert success" role="status">{shareStatus}</div>}
-                <button className="primary-btn wide" disabled={isSharing || fileList.length === 0}>
-                  {isSharing ? "Creating protected share…" : "Share file securely →"}
+                <button className="primary-btn" disabled={isSharing || fileList.length === 0}>
+                  <Icon name="share" />{isSharing ? "Sharing your file…" : "Share file"}
                 </button>
               </form>
             </section>
-            <OperationPanel title="Secure File Sharing" subtitle={recipientUsername || "Key distribution pipeline"} stages={SHARE_STAGES} steps={shareSteps} active={isSharing} />
+            {!shareStatus && <OperationPanel title="Share progress" subtitle={recipientUsername} stages={SHARE_STAGES} steps={shareSteps} active={isSharing} />}
           </section>
           <section className="section-card share-list-card">
             <div className="card-heading">
-              <div><span className="section-kicker">Outgoing access</span><h3>Your active shares</h3></div>
-              <button className="outline-btn" ref={(button) => restoreFocus(button, "refresh")} onClick={refreshShares} disabled={isLoadingShares}>{isLoadingShares ? "Refreshing…" : "Refresh"}</button>
+              <h3>Shared by you</h3>
+              <button className="outline-btn" ref={(button) => restoreFocus(button, "refresh")} onClick={refreshShares} disabled={isLoadingShares}><Icon name="refresh" />{isLoadingShares ? "Refreshing…" : "Refresh"}</button>
             </div>
             {shareListError && <div className="form-alert danger" role="alert">{shareListError}</div>}
             {sentShares.length === 0 ? (
-              !shareListError && <EmptyShare text="No active outgoing shares." loading={isLoadingShares} />
+              !shareListError && <EmptyShare text="No files shared yet." loading={isLoadingShares} />
             ) : (
               <div className="share-list">
                 {sentShares.map((share) => {
@@ -211,15 +208,15 @@ export default function SharingPanel({ section = "sharing", fileList, authToken,
                   return (
                     <div className="share-row" key={id}>
                       <span className="share-avatar" aria-hidden="true">{username.slice(0, 1).toUpperCase()}</span>
-                      <div><strong>Encrypted file</strong><small>To {username} · {formatDate(share.createdAt)}</small></div>
-                      <span className="share-status"><i aria-hidden="true" /> Active</span>
-                      {!confirming && <button className="danger-btn" ref={(button) => restoreFocus(button, id)} onClick={() => setPendingRevokeId(id)} disabled={revokingShareId !== null}>Revoke</button>}
+                      <div className="share-copy"><strong>Private file</strong><small>To {username} · {formatDate(share.createdAt)}</small></div>
+                      <span className="share-status"><Icon name="check" /> Active</span>
+                      {!confirming && <button className="danger-btn" ref={(button) => restoreFocus(button, id)} onClick={() => setPendingRevokeId(id)} disabled={revokingShareId !== null}>Remove access</button>}
                       {confirming && (
-                        <div className="revoke-confirmation" role="group" aria-label={`Revoke access for ${username}`}>
-                          <p>Revoke access for <strong>{username}</strong>?</p>
+                        <div className="revoke-confirmation" role="group" aria-label={`Remove access for ${username}`}>
+                          <p>Remove access for <strong>{username}</strong>?</p>
                           <div className="confirmation-actions">
                             <button className="outline-btn" autoFocus onClick={() => { focusTarget.current = id; setPendingRevokeId(null); }} disabled={revokingShareId !== null}>Cancel</button>
-                            <button className="danger-btn" onClick={() => handleRevoke(id, username)} disabled={revokingShareId !== null}>{revokingShareId === id ? "Revoking…" : "Revoke access"}</button>
+                            <button className="danger-btn" onClick={() => handleRevoke(id, username)} disabled={revokingShareId !== null}>{revokingShareId === id ? "Removing…" : "Remove access"}</button>
                           </div>
                         </div>
                       )}
@@ -228,10 +225,7 @@ export default function SharingPanel({ section = "sharing", fileList, authToken,
                 })}
               </div>
             )}
-            <div className="revocation-note">
-              <strong>About revocation</strong>
-              <span>Revocation blocks future downloads. It cannot erase files a recipient has already downloaded.</span>
-            </div>
+            <div className="revocation-note"><Icon name="info" /><span>Removing access stops future downloads, but can’t erase saved copies.</span></div>
           </section>
         </>
       ) : (
@@ -241,11 +235,11 @@ export default function SharingPanel({ section = "sharing", fileList, authToken,
           <section className="received-layout">
             <section className="section-card received-list-card">
               <div className="card-heading">
-                <div><span className="section-kicker">Incoming shares</span><h3>Files available to you</h3></div>
-                <button className="outline-btn" onClick={refreshShares} disabled={isLoadingShares}>{isLoadingShares ? "Refreshing…" : "Refresh"}</button>
+                <h3>Files from others</h3>
+                <button className="outline-btn" onClick={refreshShares} disabled={isLoadingShares}><Icon name="refresh" />{isLoadingShares ? "Refreshing…" : "Refresh"}</button>
               </div>
               {receivedShares.length === 0 ? (
-                !shareListError && <EmptyShare text="No active incoming shares." loading={isLoadingShares} />
+                !shareListError && <EmptyShare text="Nothing shared with you yet." loading={isLoadingShares} />
               ) : (
                 <div className="share-list">
                   {receivedShares.map((share) => {
@@ -254,16 +248,16 @@ export default function SharingPanel({ section = "sharing", fileList, authToken,
                     return (
                       <div className="received-row" key={id}>
                         <span className="share-avatar" aria-hidden="true">{sender.slice(0, 1).toUpperCase()}</span>
-                        <div><strong>Encrypted shared file</strong><small>From {sender} · {formatDate(share.createdAt)}</small></div>
-                        <span className="share-status"><i aria-hidden="true" /> Available</span>
-                        <button className="primary-mini" onClick={() => handleSharedDownload(id, sender)} disabled={downloadingShareId !== null}>{downloadingShareId === id ? "Decrypting…" : "Decrypt & download"}</button>
+                        <div className="share-copy"><strong>Private file</strong><small>From {sender} · {formatDate(share.createdAt)}</small></div>
+                        <span className="share-status"><Icon name="check" /> Available</span>
+                        <button className="primary-mini" onClick={() => handleSharedDownload(id, sender)} disabled={downloadingShareId !== null}><Icon name="download" />{downloadingShareId === id ? "Preparing…" : "Download"}</button>
                       </div>
                     );
                   })}
                 </div>
               )}
             </section>
-            <OperationPanel title="Secure Download" subtitle="Recipient-side decryption" stages={RECEIVE_STAGES} steps={receiveSteps} active={downloadingShareId !== null} />
+            <OperationPanel title="Download progress" stages={RECEIVE_STAGES} steps={receiveSteps} active={downloadingShareId !== null} />
           </section>
         </>
       )}
@@ -274,7 +268,7 @@ export default function SharingPanel({ section = "sharing", fileList, authToken,
 function EmptyShare({ text, loading }) {
   return (
     <div className="empty-state" role={loading ? "status" : undefined}>
-      {loading ? <><div className="loader" /><p>Loading shares…</p></> : <><div className="empty-icon" aria-hidden="true">↗</div><strong>{text}</strong><p>Active access records will appear here.</p></>}
+      {loading ? <><div className="loader" /><p>Getting shared files…</p></> : <><div className="empty-icon"><Icon name="share" /></div><strong>{text}</strong></>}
     </div>
   );
 }

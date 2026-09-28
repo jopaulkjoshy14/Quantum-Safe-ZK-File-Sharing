@@ -5,17 +5,19 @@ import { uploadEncryptedFile } from "./services/fileUploadService.js";
 import { downloadAndDecryptFile } from "./services/fileDownloadService.js";
 import SharingPanel from "./components/SharingPanel.jsx";
 import OperationPanel from "./components/OperationPanel.jsx";
+import Icon from "./components/Icon.jsx";
+import VaultArtwork from "./components/VaultArtwork.jsx";
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 const NAV_ITEMS = [
-  ["dashboard", "Dashboard", "⌂"],
-  ["upload", "Upload", "↑"],
-  ["files", "My Encrypted Files", "□"],
-  ["sharing", "Sharing", "↗"],
-  ["received", "Shared With Me", "⇩"],
-  ["activity", "Activity Log", "◷"],
-  ["security", "Security Center", "◇"],
-  ["about", "About", "i"],
+  ["dashboard", "Overview", "home"],
+  ["upload", "Upload", "upload"],
+  ["files", "My files", "folder"],
+  ["sharing", "Sharing", "share"],
+  ["received", "Shared with me", "download"],
+  ["activity", "Activity", "clock"],
+  ["security", "Security", "shield"],
+  ["about", "About", "info"],
 ];
 
 function formatDisplayUsername(username) {
@@ -176,7 +178,7 @@ function App() {
       setLoginPassword("");
       setPage("dashboard");
       setActivities([]);
-      addActivity("AUTH", "Secure session established", "Master Key and ML-KEM private key recovered into browser memory.");
+      addActivity("AUTH", "Signed in", "Your workspace is ready.");
       await loadFileList(data.authToken);
     } catch (err) {
       setAuthToken(null);
@@ -208,7 +210,7 @@ function App() {
     setUploadResult(null);
     setUploadSteps([]);
     if (!selectedFile) return setUploadError("Please select a file first.");
-    if (!authToken || !runtimeKeys?.masterKey) return setUploadError("Authenticated cryptographic session is unavailable.");
+    if (!authToken || !runtimeKeys?.masterKey) return setUploadError("Your session is unavailable. Sign in again.");
     setIsUploading(true);
     try {
       const result = await uploadEncryptedFile({
@@ -219,14 +221,14 @@ function App() {
         onProgress: (step) => setUploadSteps((current) => [...current, step]),
       });
       setUploadResult(result);
-      addActivity("UPLOAD", "Encrypted file uploaded", `${selectedFile.name} · ${formatBytes(selectedFile.size)} · ciphertext stored in GridFS`);
+      addActivity("UPLOAD", "File uploaded", `${selectedFile.name} · ${formatBytes(selectedFile.size)}`);
       setSelectedFile(null);
       const input = document.getElementById("fileUpload");
       if (input) input.value = "";
       await loadFileList();
     } catch (err) {
-      setUploadError(err.message || "Encrypted file upload failed.");
-      addActivity("UPLOAD", "Encrypted upload failed", err.message || "The secure upload operation failed.", "failed");
+      setUploadError(err.message || "Unable to upload your file. Try again.");
+      addActivity("UPLOAD", "Upload couldn't finish", err.message || "Try uploading the file again.", "failed");
     } finally {
       setIsUploading(false);
     }
@@ -235,7 +237,7 @@ function App() {
   async function handleFileDownload(fileId) {
     setDownloadError("");
     setDownloadSteps([]);
-    if (!authToken || !runtimeKeys?.masterKey) return setDownloadError("Authenticated cryptographic session is unavailable.");
+    if (!authToken || !runtimeKeys?.masterKey) return setDownloadError("Your session is unavailable. Sign in again.");
     setDownloadingFileId(fileId);
     try {
       const result = await downloadAndDecryptFile({
@@ -255,10 +257,10 @@ function App() {
       anchor.click();
       anchor.remove();
       setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-      addActivity("DOWNLOAD", "File decrypted locally", `${result.metadata.name} · plaintext reconstructed in the browser`);
+      addActivity("DOWNLOAD", "File downloaded", result.metadata.name);
     } catch (err) {
-      setDownloadError(err.message || "File download and decryption failed.");
-      addActivity("DOWNLOAD", "Secure download failed", err.message || "The secure download operation failed.", "failed");
+      setDownloadError(err.message || "Unable to download your file. Try again.");
+      addActivity("DOWNLOAD", "Download couldn't finish", err.message || "Try downloading the file again.", "failed");
     } finally {
       setDownloadingFileId(null);
     }
@@ -289,52 +291,57 @@ function App() {
   const recentActivities = activities.slice(0, 5);
 
   if (!loggedIn) {
+    const isLogin = authView === "login";
+    const busy = isLogin ? isLoggingIn : isRegistering;
     return (
       <div className="auth-shell">
-        <div className="auth-noise" />
         <div className="auth-layout">
           <section className="auth-brand-panel">
-            <div className="brand-lockup"><span className="brand-symbol"><span /></span><div><strong>QSZKFSS</strong><small>QUANTUM SAFE FILE SHARING</small></div></div>
+            <Brand className="brand-lockup" />
             <div className="auth-hero">
-              <span className="eyebrow"><i /> Browser-first security</span>
-              <h1>Private files.<br /><em>Protected keys.</em></h1>
-              <p>A quantum-safe file sharing workspace where files are encrypted before they leave your browser.</p>
+              <span className="eyebrow">A little more peace of mind</span>
+              <h1>Your files.<br />Your people.<br /><em>Your privacy.</em></h1>
+              <p>Store securely. Share simply.</p>
+              <VaultArtwork />
             </div>
             <div className="auth-principles">
-              <div><b>01</b><strong>AES-256-GCM</strong><span>Client-side file encryption</span></div>
-              <div><b>02</b><strong>ML-KEM-768</strong><span>Post-quantum key establishment</span></div>
-              <div><b>03</b><strong>Provider-blind</strong><span>Plaintext stays out of the cloud</span></div>
+              <span><Icon name="upload" /> Upload</span>
+              <span><Icon name="share" /> Share</span>
+              <span><Icon name="download" /> Download</span>
             </div>
-            <div className="auth-footer"><span><i className={backendOnline ? "live" : ""} /> {backendOnline ? "Backend operational" : backendMessage === "Checking connection..." ? "Checking backend" : "Backend unavailable"}</span><span>QSZKFSS · V1</span></div>
+            <div className="auth-footer"><span><i className={backendOnline ? "live" : ""} />{backendOnline ? "Connected" : backendMessage === "Checking connection..." ? "Connecting…" : "Connection unavailable"}</span><span>Made for your privacy</span></div>
           </section>
           <section className="auth-form-panel">
-            <div className="mobile-brand"><span className="brand-symbol"><span /></span><strong>QSZKFSS</strong></div>
-            {authView === "login" ? (
-              <div className="auth-form-wrap">
-                <div className="form-heading"><span className="section-kicker">Secure access</span><h2>Welcome back.</h2><p>Sign in to recover your protected cryptographic session.</p></div>
-                <form onSubmit={handleLogin} className="modern-form">
-                  <label>Username<input value={loginUsername} onChange={(e) => { setLoginUsername(e.target.value); setLoginError(""); setRegisterStatus(""); }} placeholder="your username" autoComplete="username" required minLength={3} maxLength={50} disabled={isLoggingIn} /></label>
-                  <label>Password<input type="password" value={loginPassword} onChange={(e) => { setLoginPassword(e.target.value); setLoginError(""); setRegisterStatus(""); }} placeholder="Your account password" autoComplete="current-password" required minLength={8} maxLength={128} disabled={isLoggingIn} /></label>
-                  {loginError && <div className="form-alert danger" role="alert">{loginError}</div>}
-                  {registerStatus && <div className="form-alert success" role="status">{registerStatus}</div>}
-                  <button className="primary-btn wide" disabled={isLoggingIn}>{isLoggingIn ? "Establishing secure session…" : "Sign in securely →"}</button>
-                </form>
-                <div className="auth-switch">Don't have an account? <button onClick={() => { setAuthView("register"); setRegisterStatus(""); setLoginError(""); }}>Create one</button></div>
-                <div className="auth-assurance"><span>◇</span><div><strong>Your keys stay in runtime memory</strong><p>Cryptographic keys are not persisted in browser storage.</p></div></div>
+            <Brand className="mobile-brand" />
+            <div className="auth-form-wrap">
+              <span className="auth-greeting"><Icon name={isLogin ? "lock" : "plus"} /> Your private workspace</span>
+              <div className="form-heading">
+                <h2>{isLogin ? "Welcome back." : "Let's get you started."}</h2>
+                <p>{isLogin ? "Sign in to get back to your files." : "Create an account to upload and share privately."}</p>
               </div>
-            ) : (
-              <div className="auth-form-wrap">
-                <div className="form-heading"><span className="section-kicker">New protected identity</span><h2>Create your account.</h2><p>Your Master Key and ML-KEM private key are generated and protected in the browser.</p></div>
-                <form onSubmit={handleRegister} className="modern-form">
-                  <label>Username<input value={registerUsername} onChange={(e) => { setRegisterUsername(e.target.value); setRegisterError(""); }} placeholder="choose a username" autoComplete="username" required minLength={3} maxLength={50} disabled={isRegistering} /></label>
-                  <label>Password<input type="password" value={registerPassword} onChange={(e) => { setRegisterPassword(e.target.value); setRegisterError(""); }} placeholder="At least 8 characters" autoComplete="new-password" required minLength={8} maxLength={128} disabled={isRegistering} /></label>
-                  {registerError && <div className="form-alert danger" role="alert">{registerError}</div>}
-                  <button className="primary-btn wide" disabled={isRegistering}>{isRegistering ? "Creating protected account…" : "Create account →"}</button>
-                </form>
-                <div className="auth-switch">Already registered? <button onClick={() => { setAuthView("login"); setRegisterError(""); }}>Sign in</button></div>
-                <div className="auth-assurance"><span>✓</span><div><strong>Protection starts in the browser</strong><p>PBKDF2-HMAC-SHA-256, AES-GCM and ML-KEM-768 are used by V1.</p></div></div>
+              <form onSubmit={isLogin ? handleLogin : handleRegister} className="modern-form">
+                <label>Username
+                  <input value={isLogin ? loginUsername : registerUsername} onChange={(event) => {
+                    if (isLogin) { setLoginUsername(event.target.value); setLoginError(""); setRegisterStatus(""); }
+                    else { setRegisterUsername(event.target.value); setRegisterError(""); }
+                  }} placeholder={isLogin ? "Enter your username" : "Choose a username"} autoComplete="username" required minLength={3} maxLength={50} disabled={busy} />
+                </label>
+                <label>Password
+                  <input type="password" value={isLogin ? loginPassword : registerPassword} onChange={(event) => {
+                    if (isLogin) { setLoginPassword(event.target.value); setLoginError(""); setRegisterStatus(""); }
+                    else { setRegisterPassword(event.target.value); setRegisterError(""); }
+                  }} placeholder={isLogin ? "Enter your password" : "At least 8 characters"} autoComplete={isLogin ? "current-password" : "new-password"} required minLength={8} maxLength={128} disabled={busy} />
+                </label>
+                {(isLogin ? loginError : registerError) && <div className="form-alert danger" role="alert">{isLogin ? loginError : registerError}</div>}
+                {isLogin && registerStatus && <div className="form-alert success" role="status">{registerStatus}</div>}
+                <button className="primary-btn wide" disabled={busy}>{busy ? isLogin ? "Signing in…" : "Creating your account…" : isLogin ? "Sign in" : "Create account"}<Icon name="arrow" /></button>
+              </form>
+              <div className="auth-switch">
+                {isLogin ? "New here?" : "Already have an account?"}
+                <button disabled={busy} onClick={() => { setAuthView(isLogin ? "register" : "login"); setRegisterStatus(""); setLoginError(""); setRegisterError(""); }}>{isLogin ? "Create an account" : "Sign in"}</button>
               </div>
-            )}
+              <div className="auth-assurance"><Icon name="shield" /><span>Your files are encrypted in your browser.</span></div>
+            </div>
           </section>
         </div>
       </div>
@@ -342,22 +349,28 @@ function App() {
   }
 
   const go = (next) => setPage(next);
-  const pageTitle = NAV_ITEMS.find(([id]) => id === page)?.[1] || "Dashboard";
-
+  const pageTitle = NAV_ITEMS.find(([id]) => id === page)?.[1] || "Overview";
   return (
     <div className="product-shell">
       <aside className="sidebar">
-        <div className="sidebar-brand"><span className="brand-symbol"><span /></span><div><strong>QSZKFSS</strong><small>QUANTUM SAFE</small></div></div>
-        <div className="nav-caption">Workspace</div>
-        <nav aria-label="Workspace">{NAV_ITEMS.slice(0, 6).map(([id, label, icon]) => <button key={id} className={page === id ? "active" : ""} aria-current={page === id ? "page" : undefined} onClick={() => go(id)}><span aria-hidden="true">{icon}</span>{label}{id === "activity" && activities.length > 0 ? <b>{activities.length}</b> : null}</button>)}</nav>
-        <div className="nav-caption lower">System</div>
-        <nav aria-label="System">{NAV_ITEMS.slice(6).map(([id, label, icon]) => <button key={id} className={page === id ? "active" : ""} aria-current={page === id ? "page" : undefined} onClick={() => go(id)}><span aria-hidden="true">{icon}</span>{label}</button>)}</nav>
-        <div className="sidebar-bottom"><div className="sidebar-status"><i className={backendOnline ? "live" : ""} /><div><strong>{backendOnline ? "System operational" : "Backend unavailable"}</strong><small>{backendOnline ? "Secure API connection" : backendMessage}</small></div></div><button className="sidebar-user" onClick={handleLogout}><span>{currentUser.username.slice(0, 1).toUpperCase()}</span><div><strong>{formatDisplayUsername(currentUser.username)}</strong><small>Sign out</small></div><b>↪</b></button></div>
+        <Brand className="sidebar-brand" />
+        <div className="nav-caption">Your workspace</div>
+        <nav aria-label="Workspace">{NAV_ITEMS.slice(0, 6).map(([id, label, icon]) => (
+          <button key={id} className={page === id ? "active" : ""} aria-current={page === id ? "page" : undefined} onClick={() => go(id)}>
+            <Icon name={icon} /><span>{label}</span>{id === "activity" && activities.length > 0 && <b>{activities.length}</b>}
+          </button>
+        ))}</nav>
+        <div className="nav-caption lower">Good to know</div>
+        <nav aria-label="System">{NAV_ITEMS.slice(6).map(([id, label, icon]) => (
+          <button key={id} className={page === id ? "active" : ""} aria-current={page === id ? "page" : undefined} onClick={() => go(id)}><Icon name={icon} /><span>{label}</span></button>
+        ))}</nav>
+        <div className="sidebar-bottom">
+          <div className="sidebar-status"><i className={backendOnline ? "live" : ""} /><span>{backendOnline ? "Connected to your workspace" : "Connection unavailable"}</span></div>
+          <button className="sidebar-user" onClick={handleLogout}><span className="user-avatar">{currentUser.username.slice(0, 1).toUpperCase()}</span><div><strong>{formatDisplayUsername(currentUser.username)}</strong><small>Sign out</small></div><Icon name="logout" /></button>
+        </div>
       </aside>
-
       <main className="main-content">
-        <header className="content-topbar"><div><span className="breadcrumb">QSZKFSS <b>/</b> {pageTitle}</span><h1>{pageTitle}</h1></div><div className="topbar-security"><span className="secure-dot" /> Protected session <b>AES-256-GCM</b><b>ML-KEM-768</b></div></header>
-
+        <header className="content-topbar"><div><span className="breadcrumb">Workspace <span>/</span> {pageTitle}</span><h1>{pageTitle}</h1></div><div className="topbar-security"><Icon name="shield" /> Encrypted workspace</div></header>
         {page === "dashboard" && <Dashboard currentUser={currentUser} fileList={fileList} activities={recentActivities} backendOnline={backendOnline} onNavigate={go} />}
         {page === "upload" && <UploadPage selectedFile={selectedFile} handleFileSelect={handleFileSelect} handleFileUpload={handleFileUpload} isUploading={isUploading} uploadError={uploadError} uploadResult={uploadResult} steps={uploadSteps} />}
         {page === "files" && <FilesPage fileList={fileList} loadFileList={loadFileList} isLoadingFiles={isLoadingFiles} fileListError={fileListError} downloadError={downloadError} steps={downloadSteps} downloadingFileId={downloadingFileId} onDownload={handleFileDownload} onShare={() => go("sharing")} />}
@@ -371,79 +384,212 @@ function App() {
   );
 }
 
-function Dashboard({ currentUser, fileList, activities, backendOnline, onNavigate }) {
-  return <div className="page-body">
-    <section className="welcome-row"><div><span className="eyebrow"><i /> Secure session active</span><h2>Good to see you, <em>{formatDisplayUsername(currentUser.username)}</em>.</h2><p>Your encrypted workspace is ready. Sensitive cryptographic material exists only in this browser session.</p></div><div className="posture-card"><span>SECURITY POSTURE</span><strong><i /> Protected</strong><small>Browser-side cryptography active</small></div></section>
-    <section className="stat-grid"><Stat icon="□" value={fileList.length} label="Encrypted files" /><Stat icon="◇" value="ML-KEM" label="Post-quantum sharing" /><Stat icon="⌁" value="Runtime" label="Keys not persisted" /><Stat icon="✓" value={backendOnline ? "Online" : "Offline"} label="Backend status" /></section>
-    <section className="dashboard-grid">
-      <div className="dashboard-main">
-        <div className="feature-banner"><div className="feature-icon">◇</div><div><span>PROVIDER-BLIND PROTECTION</span><h3>Plaintext never needs to reach the cloud.</h3><p>Files are encrypted in the browser. The server receives ciphertext, encrypted metadata and protected key material.</p></div><button onClick={() => onNavigate("security")}>Security Center →</button></div>
-        <div className="section-card"><div className="card-heading"><div><span className="section-kicker">Encrypted vault</span><h3>Recent files</h3></div><button className="text-btn" onClick={() => onNavigate("files")}>View all →</button></div>{fileList.length === 0 ? <Empty icon="□" title="Your encrypted vault is empty" text="Upload your first file to create a client-side encrypted object." action="Upload a file" onClick={() => onNavigate("upload")} /> : <div className="mini-file-list">{fileList.slice(0, 5).map((file) => <div className="mini-file" key={String(file.id)}><span className="file-tile">□</span><div><strong>Encrypted file</strong><small>{String(file.id)}</small></div><span>v{file.keyVersion || 1}</span><button onClick={() => onNavigate("files")}>Open</button></div>)}</div>}</div>
-      </div>
-      <aside className="dashboard-side"><div className="section-card activity-preview"><div className="card-heading"><div><span className="section-kicker">Audit view</span><h3>Recent activity</h3></div><button className="text-btn" onClick={() => onNavigate("activity")}>View all →</button></div>{activities.length === 0 ? <Empty icon="◷" title="No activity yet" text="Secure operations will appear here as you use the workspace." /> : activities.map((item) => <ActivityItem key={item.id} item={item} />)}</div><div className="section-card quick-card"><span className="section-kicker">Quick action</span><h3>Protect a new file.</h3><p>Encryption, metadata protection and upload happen as one secure operation.</p><button className="primary-btn" onClick={() => onNavigate("upload")}>Start secure upload →</button></div></aside>
-    </section>
-  </div>;
+function Brand({ className }) {
+  return <div className={className}><span className="brand-symbol"><Icon name="shield" /></span><div><strong>QSZKFSS</strong><small>Private file sharing</small></div></div>;
 }
 
-function Stat({ icon, value, label }) { return <div className="stat-card"><span>{icon}</span><div><strong>{value}</strong><small>{label}</small></div></div>; }
+function Dashboard({ currentUser, fileList, activities, backendOnline, onNavigate }) {
+  return (
+    <div className="page-body">
+      <section className="welcome-banner">
+        <div className="welcome-copy">
+          <span className="eyebrow"><Icon name="shield" /> Your private workspace</span>
+          <h2>Hi, {formatDisplayUsername(currentUser.username)}.</h2>
+          <p>A little space for the files that matter.</p>
+          <div className="welcome-actions">
+            <button className="primary-btn" onClick={() => onNavigate("upload")}><Icon name="plus" /> Upload a file</button>
+            <button className="outline-btn" onClick={() => onNavigate("sharing")}><Icon name="share" /> Share a file</button>
+          </div>
+        </div>
+        <VaultArtwork />
+      </section>
+      <section className="stat-grid">
+        <Stat icon="folder" value={fileList.length} label="Files in your vault" tone="indigo" />
+        <Stat icon="clock" value={activities.length} label="Recent actions" tone="amber" />
+        <Stat icon="shield" value="Encrypted" label="File storage" tone="teal" />
+        <Stat icon="cloud" value={backendOnline ? "Online" : "Offline"} label="Connection" tone="sky" />
+      </section>
+      <section className="dashboard-grid">
+        <section className="section-card">
+          <div className="card-heading"><h3>Recent files</h3><button className="text-btn" onClick={() => onNavigate("files")}>View all <Icon name="arrow" /></button></div>
+          {fileList.length === 0 ? <Empty icon="folder" title="Your next file belongs here." text="Add your first file to get started." action="Upload a file" onClick={() => onNavigate("upload")} /> : (
+            <div className="mini-file-list">{fileList.slice(0, 5).map((file) => (
+              <div className="mini-file" key={String(file.id)}>
+                <span className="file-tile"><Icon name="file" /></span>
+                <div><strong>Private file</strong><small title={String(file.id)}>Reference · {String(file.id).slice(-8)}</small></div>
+                <button className="outline-btn" onClick={() => onNavigate("files")}>Open <Icon name="arrow" /></button>
+              </div>
+            ))}</div>
+          )}
+        </section>
+        <section className="section-card activity-preview">
+          <div className="card-heading"><h3>Latest activity</h3><button className="text-btn" onClick={() => onNavigate("activity")}>View all <Icon name="arrow" /></button></div>
+          {activities.length === 0 ? <Empty icon="clock" title="A fresh start." text="Your recent actions will appear here." /> : activities.map((item) => <ActivityItem key={item.id} item={item} />)}
+        </section>
+      </section>
+    </div>
+  );
+}
+
+function Stat({ icon, value, label, tone }) {
+  return <div className={`stat-card ${tone}`}><span className="stat-icon"><Icon name={icon} /></span><div><strong>{value}</strong><small>{label}</small></div></div>;
+}
+
+const UPLOAD_STAGES = [
+  ["key", "Prepare your file"], ["encrypt", "Encrypt the file"],
+  ["metadata", "Protect file details"], ["protect-meta", "Secure file details"],
+  ["protect-fek", "Protect the file key"], ["package", "Prepare upload"],
+  ["upload", "Upload encrypted file"], ["gridfs", "Save to your vault"],
+];
+const DOWNLOAD_STAGES = [
+  ["auth", "Check access"], ["retrieve", "Get encrypted file"],
+  ["fek", "Get the protected key"], ["decrypt", "Unlock the file"],
+  ["metadata", "Get file details"], ["metadata-decrypt", "Read file details"],
+  ["reconstruct", "Prepare download"],
+];
 
 function UploadPage({ selectedFile, handleFileSelect, handleFileUpload, isUploading, uploadError, uploadResult, steps }) {
-  const stages = [
-    ["key", "Generate fresh file encryption key"],
-    ["encrypt", "Encrypt file with AES-256-GCM"],
-    ["metadata", "Encrypt file metadata"],
-    ["protect-meta", "Protect metadata key"],
-    ["protect-fek", "Protect owner file key"],
-    ["package", "Prepare encrypted package"],
-    ["upload", "Upload ciphertext to server"],
-    ["gridfs", "Store encrypted data in GridFS"],
-  ];
-  return <div className="page-body narrow-body"><div className="page-intro"><span className="section-kicker">Client-side protection</span><h2>Encrypt a new file.</h2><p>Choose a file to encrypt in your browser, then upload it to your vault.</p></div><div className="operation-layout"><section className="section-card upload-card"><div className="drop-zone-large"><input id="fileUpload" type="file" aria-label="Choose a file to encrypt" onChange={handleFileSelect} disabled={isUploading} /><div className="upload-orb" aria-hidden="true">↑</div><strong>{selectedFile ? selectedFile.name : "Choose a file"}</strong><span>{selectedFile ? `${formatBytes(selectedFile.size)} · ${selectedFile.type || "application/octet-stream"}` : "Maximum file size: 100 MB"}</span><label htmlFor="fileUpload">Browse files</label></div>{uploadError && <div className="form-alert danger" role="alert">{uploadError}</div>}<div className="upload-submit"><div><strong>{selectedFile ? "Ready to encrypt" : "Select a file to continue"}</strong><small>Your file and its metadata are encrypted locally.</small></div><button className="primary-btn" onClick={handleFileUpload} disabled={isUploading || !selectedFile}>{isUploading ? "Encrypting & uploading…" : "Encrypt & upload →"}</button></div>{uploadResult && <div className="success-card" role="status"><span aria-hidden="true">✓</span><div><strong>File encrypted and uploaded.</strong><p>Your file is now available in your vault.</p></div></div>}</section><OperationPanel title="Secure Upload" subtitle={selectedFile ? selectedFile.name : "Operation pipeline"} stages={stages} steps={steps} active={isUploading} /></div></div>;
+  return (
+    <div className="page-body narrow-body">
+      <div className="page-intro"><span className="section-kicker"><Icon name="upload" /> Add something new</span><h2>A safe place for your files.</h2><p>Choose a file. We’ll encrypt it before uploading.</p></div>
+      <div className="operation-layout">
+        <section className="section-card upload-card">
+          <div className={`drop-zone-large ${selectedFile ? "has-file" : ""}`}>
+            <input id="fileUpload" type="file" aria-label="Choose a file to upload" onChange={handleFileSelect} disabled={isUploading} />
+            <div className="upload-orb"><Icon name={selectedFile ? "file" : "upload"} /></div>
+            <strong>{selectedFile ? selectedFile.name : "What would you like to upload?"}</strong>
+            <span>{selectedFile ? formatBytes(selectedFile.size) : "Any file type · Up to 100 MB"}</span>
+            <label htmlFor="fileUpload">{selectedFile ? "Choose another file" : "Browse files"}<Icon name="plus" /></label>
+          </div>
+          {uploadError && <div className="form-alert danger" role="alert">{uploadError}</div>}
+          <div className="upload-submit">
+            <div className="upload-assurance"><Icon name="lock" /><span>Encrypted before upload.</span></div>
+            <button className="primary-btn" onClick={handleFileUpload} disabled={isUploading || !selectedFile}>{isUploading ? "Uploading your file…" : "Upload file"}<Icon name="arrow" /></button>
+          </div>
+          {uploadResult && <div className="success-card" role="status"><Icon name="check" /><strong>All set! Your file is in your vault.</strong></div>}
+        </section>
+        {!uploadResult && <OperationPanel title="Upload progress" subtitle={selectedFile?.name} stages={UPLOAD_STAGES} steps={steps} active={isUploading} />}
+      </div>
+    </div>
+  );
 }
 
 function FilesPage({ fileList, loadFileList, isLoadingFiles, fileListError, downloadError, steps, downloadingFileId, onDownload, onShare }) {
   return (
     <div className="page-body">
       <div className="page-intro inline">
-        <div><span className="section-kicker">Private vault</span><h2>My encrypted files.</h2><p>Cloud-visible references are separated from the protected file contents and metadata.</p></div>
-        <button className="outline-btn" onClick={() => loadFileList()} disabled={isLoadingFiles}>{isLoadingFiles ? "Refreshing…" : "Refresh vault"}</button>
+        <div><span className="section-kicker"><Icon name="folder" /> Your private vault</span><h2>Your files, all here.</h2><p>Download a file or share access with someone.</p></div>
+        <button className="outline-btn" onClick={() => loadFileList()} disabled={isLoadingFiles}><Icon name="refresh" />{isLoadingFiles ? "Refreshing…" : "Refresh"}</button>
       </div>
       {fileListError && <div className="form-alert danger" role="alert">{fileListError}</div>}
       {downloadError && <div className="form-alert danger" role="alert">{downloadError}</div>}
       <section className="section-card vault-card">
-        {isLoadingFiles && fileList.length === 0 ? <div className="empty-state" role="status"><div className="loader" /><p>Loading encrypted files…</p></div> : fileList.length === 0 ? !fileListError && <Empty icon="□" title="Your vault is empty" text="Upload a file to create your first encrypted object." /> : (
-          <div className="vault-table" role="table" aria-label="Encrypted files">
-            <div className="vault-head" role="row">
-              <span aria-hidden="true" /><span role="columnheader">File</span><span role="columnheader">Key version</span><span role="columnheader">Created</span><span role="columnheader">Status</span><span role="columnheader">Actions</span>
-            </div>
-            <div className="vault-list" role="rowgroup">{fileList.map((file) => { const id = String(file.id); const busy = downloadingFileId === id; return (
-              <div className="vault-row" role="row" key={id}>
-                <div className="vault-file-icon" role="cell" aria-hidden="true">□</div>
-                <div className="vault-file" role="cell"><strong>Encrypted file</strong><small>{id}</small></div>
-                <div className="vault-meta vault-key-version" role="cell"><span>KEY VERSION</span><strong>V{file.keyVersion || 1}</strong></div>
-                <div className="vault-meta vault-created" role="cell"><span>CREATED</span><strong>{file.createdAt ? new Date(file.createdAt).toLocaleDateString() : "—"}</strong></div>
-                <div className="vault-status" role="cell"><i aria-hidden="true" /> Protected</div>
-                <div className="vault-actions" role="cell"><button aria-label={`Share encrypted file ${id.slice(0, 8)}`} onClick={() => onShare()}>Share</button><button aria-label={`Decrypt encrypted file ${id.slice(0, 8)}`} onClick={() => onDownload(id)} disabled={downloadingFileId !== null}>{busy ? "Decrypting…" : "Decrypt ↓"}</button></div>
-              </div>);
+        {isLoadingFiles && fileList.length === 0 ? <div className="empty-state" role="status"><div className="loader" /><p>Getting your files…</p></div> : fileList.length === 0 ? !fileListError && <Empty icon="folder" title="Room for something new." text="Upload a file to start your collection." /> : (
+          <div className="vault-table" role="table" aria-label="Your private files">
+            <div className="vault-head" role="row"><span aria-hidden="true" /><span role="columnheader">File</span><span role="columnheader">Added</span><span role="columnheader">Status</span><span role="columnheader">Actions</span></div>
+            <div className="vault-list" role="rowgroup">{fileList.map((file) => {
+              const id = String(file.id);
+              const busy = downloadingFileId === id;
+              return (
+                <div className="vault-row" role="row" key={id}>
+                  <div className="vault-file-icon" role="cell" aria-hidden="true"><Icon name="file" /></div>
+                  <div className="vault-file" role="cell"><strong>Private file</strong><small title={id}>Reference · {id.slice(-8)}</small></div>
+                  <div className="vault-meta vault-created" role="cell"><span>Added</span><strong>{file.createdAt ? new Date(file.createdAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—"}</strong></div>
+                  <div className="vault-status" role="cell"><Icon name="lock" /> Encrypted</div>
+                  <div className="vault-actions" role="cell"><button className="outline-btn" aria-label={`Share private file ${id.slice(-8)}`} onClick={() => onShare()}><Icon name="share" /> Share</button><button className="primary-mini" aria-label={`Download private file ${id.slice(-8)}`} onClick={() => onDownload(id)} disabled={downloadingFileId !== null}><Icon name="download" />{busy ? "Preparing…" : "Download"}</button></div>
+                </div>
+              );
             })}</div>
           </div>
         )}
-        <div className="vault-note"><span aria-hidden="true">◇</span><div><strong>Protected metadata</strong><p>Filenames, MIME types and original sizes are recovered through browser-side metadata decryption.</p></div></div>
+        <div className="vault-note"><Icon name="lock" /><span>File names stay encrypted until you download.</span></div>
       </section>
-      {(steps.length > 0 || downloadingFileId) && <section className="section-card compact-operation"><div className="compact-head"><span className="section-kicker">Secure Download</span><strong>{downloadingFileId ? "Decrypting encrypted package…" : "Last download operation"}</strong></div><div className="compact-steps">{["Authenticated access verified", "Encrypted file retrieved", "Protected FEK recovered", "Owner FEK unwrapped locally", "Encrypted metadata recovered", "Metadata decrypted locally", "File decrypted with AES-256-GCM", "Original file reconstructed"].map((label, i) => <span className={steps[i] ? "done" : ""} key={label}>{steps[i] ? "✓" : String(i + 1).padStart(2, "0")} {label}</span>)}</div></section>}
+      <OperationPanel title="Download progress" stages={DOWNLOAD_STAGES} steps={steps} active={downloadingFileId !== null} />
     </div>
   );
 }
 
-function ActivityPage({ activities }) { return <div className="page-body"><div className="page-intro"><span className="section-kicker">Session history</span><h2>Activity log.</h2><p>A local, in-session history of meaningful application and security operations. Sensitive cryptographic secrets are never recorded here.</p></div><section className="section-card activity-card">{activities.length === 0 ? <Empty icon="◷" title="No activity recorded" text="Upload, download, share or revoke a file to build the session activity history." /> : <div className="activity-list">{activities.map((item) => <ActivityItem key={item.id} item={item} expanded />)}</div>}<div className="activity-disclaimer"><strong>Privacy boundary</strong><span>This activity history lives in the current browser session. It does not store passwords, plaintext keys, FEKs, ML-KEM private keys or file contents.</span></div></section></div>; }
+function ActivityPage({ activities }) {
+  return (
+    <div className="page-body">
+      <div className="page-intro"><span className="section-kicker"><Icon name="clock" /> This session</span><h2>Your recent activity.</h2><p>A quick look at what you’ve been up to.</p></div>
+      <section className="section-card activity-card">
+        {activities.length === 0 ? <Empty icon="clock" title="Nothing here just yet." text="Uploads, downloads, and shares will appear here." /> : <div className="activity-list">{activities.map((item) => <ActivityItem key={item.id} item={item} expanded />)}</div>}
+        <div className="activity-disclaimer"><Icon name="info" /><span>This history clears when you sign out.</span></div>
+      </section>
+    </div>
+  );
+}
 
-function ActivityItem({ item, expanded = false }) { return <div className={`activity-item ${item.status}`}><span className="activity-icon">{item.type === "UPLOAD" ? "↑" : item.type === "DOWNLOAD" ? "⇩" : item.type === "SHARE" ? "↗" : item.type === "REVOKE" ? "×" : "◇"}</span><div className="activity-copy"><strong>{item.title}</strong><span>{item.detail}</span>{expanded && <small>{formatDate(item.createdAt)}</small>}</div><time>{new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></div>; }
+function ActivityItem({ item, expanded = false }) {
+  const icon = { UPLOAD: "upload", DOWNLOAD: "download", SHARE: "share", REVOKE: "lock", AUTH: "shield" }[item.type] || "clock";
+  return (
+    <div className={`activity-item ${item.status}`}>
+      <span className="activity-icon"><Icon name={icon} /></span>
+      <div className="activity-copy"><strong>{item.title}</strong><span>{item.detail}</span><time dateTime={item.createdAt}>{expanded ? formatDate(item.createdAt) : new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></div>
+    </div>
+  );
+}
 
-function SecurityPage({ currentUser, runtimeKeys, backendOnline }) { return <div className="page-body"><div className="page-intro"><span className="section-kicker">Security Center</span><h2>Understand the protection.</h2><p>The current V1 security model, active runtime state and trust boundaries in one place.</p></div><div className="security-grid"><section className="section-card security-overview"><div className="security-score"><span>SESSION SECURITY</span><strong><i /> Protected</strong><small>{formatDisplayUsername(currentUser.username)} · {backendOnline ? "Backend reachable" : "Backend unavailable"}</small></div><div className="security-lines"><SecurityLine title="Master Key" value={runtimeKeys?.masterKey instanceof Uint8Array ? "Recovered · 256-bit" : "Unavailable"} /><SecurityLine title="ML-KEM private key" value={runtimeKeys?.mlKemPrivateKey instanceof Uint8Array ? "Recovered · 2400 bytes" : "Unavailable"} /><SecurityLine title="Browser persistence" value="Cryptographic keys not persisted" /><SecurityLine title="Authentication token" value="Runtime memory only" /><SecurityLine title="Transport" value="HTTPS / TLS deployment" /></div></section><section className="section-card crypto-stack"><span className="section-kicker">Cryptographic stack</span><h3>V1 mechanisms</h3><div className="crypto-box"><b>AES-256-GCM</b><span>File encryption + metadata encryption</span></div><div className="crypto-box"><b>ML-KEM-768</b><span>Post-quantum key establishment for sharing</span></div><div className="crypto-box"><b>PBKDF2-HMAC-SHA-256</b><span>Password-based key derivation</span></div><div className="crypto-box"><b>HKDF-SHA-256</b><span>Key separation and sharing-key derivation</span></div></section></div><div className="security-grid lower-security"><section className="section-card"><span className="section-kicker">Key architecture</span><h3>Keys have separate jobs.</h3><div className="arch-flow"><div>Password</div><i>↓</i><div>PBKDF2 → KEK</div><i>↓</i><div>Wrapped Master Key</div><i>↓</i><div className="arch-split"><span>FEK protection</span><span>Metadata protection</span><span>ML-KEM private key</span></div></div></section><section className="section-card"><span className="section-kicker">Trust model</span><h3>What each layer can know.</h3><ul className="trust-list"><li><b>Browser</b><span>Plaintext files, passwords and runtime private keys.</span></li><li><b>Backend</b><span>Authentication, authorization and operational identifiers.</span></li><li><b>MongoDB Atlas</b><span>Encrypted files, encrypted metadata and protected key material.</span></li><li><b>Network</b><span>Protected by HTTPS/TLS transport.</span></li></ul></section></div><div className="limitation-banner"><strong>Important V1 boundary</strong><p>“Zero knowledge” here means provider-blind protection of file plaintext and plaintext file-decryption keys. It is not a claim of formal zero-knowledge proofs, complete metadata hiding or a malicious-server-resistant identity system.</p></div></div>; }
-function SecurityLine({ title, value }) { return <div className="security-line"><span>✓</span><div><strong>{title}</strong><small>{value}</small></div></div>; }
+function SecurityPage({ currentUser, runtimeKeys, backendOnline }) {
+  const keysReady = runtimeKeys?.masterKey instanceof Uint8Array && runtimeKeys?.mlKemPrivateKey instanceof Uint8Array;
+  return (
+    <div className="page-body">
+      <div className="page-intro"><span className="section-kicker"><Icon name="shield" /> Peace of mind</span><h2>Your privacy, explained.</h2><p>A few things to know about your workspace.</p></div>
+      <div className="security-grid">
+        <section className="section-card security-overview">
+          <div className="security-score"><span className="security-badge"><Icon name="shield" /></span><div><span>Your session</span><strong>{keysReady ? "Protected and ready" : "Session unavailable"}</strong><small>{formatDisplayUsername(currentUser.username)} · {backendOnline ? "Connected" : "Connection unavailable"}</small></div></div>
+          <div className="security-lines">
+            <SecurityLine icon="lock" title="Encrypted in your browser" value="Files are protected before they reach storage." />
+            <SecurityLine icon="users" title="Sharing is your choice" value="Give access to another account, and remove it when needed." />
+            <SecurityLine icon="shield" title="Keys stay in this tab" value="Your private keys aren’t saved in browser storage." />
+          </div>
+        </section>
+        <section className="section-card good-to-know">
+          <span className="section-kicker"><Icon name="info" /> Good to know</span><h3>A couple of useful reminders.</h3>
+          <ul className="trust-list"><li><strong>Keep your password safe.</strong><span>Password recovery isn’t available in this version.</span></li><li><strong>Downloaded copies stay downloaded.</strong><span>Removing access stops future downloads, but can’t erase saved copies.</span></li></ul>
+        </section>
+      </div>
+      <details className="technical-details section-card">
+        <summary><Icon name="info" /> For the curious: technical details</summary>
+        <div className="technical-content">
+          <div className="crypto-box"><strong>AES-256-GCM</strong><span>Encrypts files and file details.</span></div>
+          <div className="crypto-box"><strong>ML-KEM-768</strong><span>Establishes protected keys for sharing.</span></div>
+          <div className="crypto-box"><strong>PBKDF2 + HKDF</strong><span>Derive and separate cryptographic keys.</span></div>
+          <p>Encryption hides file contents. Account identifiers, sharing records, and timestamps remain visible to the service. This is provider-blind file storage, not a formal zero-knowledge proof system.</p>
+        </div>
+      </details>
+    </div>
+  );
+}
 
-function AboutPage() { return <div className="page-body about-page"><div className="about-hero"><span className="section-kicker">About QSZKFSS</span><h2>Quantum Safe Zero Knowledge<br /><em>File Sharing System.</em></h2><p>A browser-first secure file sharing application designed to keep file plaintext and plaintext file-decryption keys away from the storage provider while using post-quantum key establishment for recipient sharing.</p></div><div className="about-grid"><AboutSection title="Project objective"><p>QSZKFSS encrypts files before they leave the user's browser and stores only encrypted/protected material on the backend and MongoDB Atlas. Authorized recipients recover and decrypt files locally.</p></AboutSection><AboutSection title="How a file is protected"><p>Every file receives a fresh random 256-bit File Encryption Key (FEK). AES-256-GCM encrypts the file. Sensitive metadata receives a separate random metadata key and is encrypted independently.</p></AboutSection><AboutSection title="Master Key model"><p>A random 256-bit Master Key is generated in the browser. The password is processed with PBKDF2-HMAC-SHA-256 to derive a KEK, which protects the Master Key with AES-GCM. The Master Key then derives dedicated wrapping keys through HKDF-based key separation.</p></AboutSection><AboutSection title="Post-quantum sharing"><p>Sharing uses ML-KEM-768. The sender encapsulates to the recipient's public key, derives a wrapping key from the shared secret with HKDF-SHA-256 and uses it to protect the file key for that recipient. ML-KEM is used for key establishment, not for encrypting the file itself.</p></AboutSection><AboutSection title="Storage model"><p>MongoDB Atlas stores application records and MongoDB GridFS stores encrypted file ciphertext. The server does not receive the plaintext file or an unwrapped FEK during normal V1 operations.</p></AboutSection><AboutSection title="Revocation"><p>Revoking a share disables future access through that share record. It cannot erase plaintext that a recipient already downloaded.</p></AboutSection><AboutSection title="Technology stack"><div className="tech-grid"><span>React + Vite</span><span>Bootstrap 5</span><span>Node.js + Express</span><span>MongoDB Atlas</span><span>MongoDB GridFS</span><span>Web Crypto API</span><span>@noble/post-quantum</span><span>HTTPS / TLS</span></div></AboutSection><AboutSection title="V1 scope & limitations"><p>V1 intentionally does not include formal zero-knowledge proofs, searchable encryption, password recovery for encrypted data, multi-device key synchronization, complex key rotation, ML-DSA signatures, hybrid KEM schemes or protection against a compromised endpoint/browser.</p></AboutSection></div><div className="about-footer-card"><span>QSZKFSS · FROZEN V1</span><strong>Designed around browser-side cryptography and provider-blind file storage.</strong><small>Operational metadata such as account IDs, authorization information, recipient identifiers, file/access IDs and timestamps can remain visible to the backend.</small></div></div>; }
-function AboutSection({ title, children }) { return <section className="section-card about-section"><h3>{title}</h3>{children}</section>; }
-function Empty({ icon, title, text, action, onClick }) { return <div className="empty-state"><div className="empty-icon">{icon}</div><strong>{title}</strong><p>{text}</p>{action && <button className="outline-btn" onClick={onClick}>{action}</button>}</div>; }
+function SecurityLine({ icon, title, value }) {
+  return <div className="security-line"><span><Icon name={icon} /></span><div><strong>{title}</strong><small>{value}</small></div></div>;
+}
+
+function AboutPage() {
+  return (
+    <div className="page-body about-page">
+      <section className="about-hero"><div><span className="eyebrow">Meet QSZKFSS</span><h2>Private files.<br /><em>Simple sharing.</em></h2><p>A workspace that puts your privacy first.</p></div><VaultArtwork /></section>
+      <div className="about-grid">
+        <AboutSection icon="upload" title="Make space." tone="indigo">Upload a file. It’s encrypted in your browser before it’s stored.</AboutSection>
+        <AboutSection icon="share" title="Bring someone in." tone="teal">Share with another account using their username. You choose the access.</AboutSection>
+        <AboutSection icon="download" title="Take it with you." tone="sky">Download your files, or the ones shared with you, and open them locally.</AboutSection>
+      </div>
+      <details className="technical-details section-card">
+        <summary><Icon name="info" /> About the project</summary>
+        <div className="technical-content"><p>Quantum Safe Zero Knowledge File Sharing System uses browser-side encryption and post-quantum key establishment for sharing.</p><div className="tech-grid"><span>React + Vite</span><span>Node.js + Express</span><span>MongoDB Atlas</span><span>Web Crypto API</span><span>AES-256-GCM</span><span>ML-KEM-768</span></div></div>
+      </details>
+    </div>
+  );
+}
+
+function AboutSection({ icon, title, tone, children }) {
+  return <section className={`section-card about-section ${tone}`}><span className="about-icon"><Icon name={icon} /></span><h3>{title}</h3><p>{children}</p></section>;
+}
+
+function Empty({ icon, title, text, action, onClick }) {
+  return <div className="empty-state"><div className="empty-icon"><Icon name={icon} /></div><strong>{title}</strong><p>{text}</p>{action && <button className="primary-btn" onClick={onClick}><Icon name="plus" />{action}</button>}</div>;
+}
 
 export default App;
