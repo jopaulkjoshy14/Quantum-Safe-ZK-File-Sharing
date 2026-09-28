@@ -10,7 +10,6 @@ const HKDF_ALGORITHM = "HKDF";
 const MASTER_KEY_LENGTH = 32;
 const FEK_LENGTH = 32;
 const IV_LENGTH = 12;
-const WRAPPING_KEY_LENGTH = 32;
 
 /*
  * Domain separation label.

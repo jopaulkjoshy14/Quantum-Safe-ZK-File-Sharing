@@ -83,7 +83,3 @@ export async function findUserById(userId) {
     _id: objectId,
   });
 }
-
-export async function insertUser(userDocument) {
-  return getUsersCollection().insertOne(userDocument);
-}

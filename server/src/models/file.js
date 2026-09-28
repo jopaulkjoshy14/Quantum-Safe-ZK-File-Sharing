@@ -323,32 +323,3 @@ export async function findFileKeyMaterialForOwner(
     keyVersion: file.keyVersion,
   };
 }
-
-
-/**
- * Delete a file metadata record.
- */
-export async function deleteFileByIdForOwner(
-  fileId,
-  ownerId
-) {
-  let fileObjectId;
-  let ownerObjectId;
-
-  try {
-    fileObjectId =
-      new ObjectId(fileId);
-
-    ownerObjectId =
-      new ObjectId(ownerId);
-  } catch {
-    return {
-      deletedCount: 0,
-    };
-  }
-
-  return getFilesCollection().deleteOne({
-    _id: fileObjectId,
-    ownerId: ownerObjectId,
-  });
-}

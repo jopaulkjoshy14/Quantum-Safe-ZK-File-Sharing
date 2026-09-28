@@ -1,6 +1,4 @@
 import {
-  bytesToBase64,
-  base64ToBytes,
   generateIV,
 } from "./crypto.js";
 
@@ -185,90 +183,4 @@ export async function decryptFile(
   }
 
   return new Uint8Array(plaintext);
-}
-
-/**
- * Convert encrypted file data and IV into
- * transport-safe Base64 values.
- *
- * Useful when testing or transmitting through
- * JSON-based APIs.
- */
-export function serializeEncryptedFile({
-  encryptedData,
-  iv,
-}) {
-  if (
-    !(
-      encryptedData instanceof
-      Uint8Array
-    )
-  ) {
-    throw new Error(
-      "Encrypted file data must be a Uint8Array."
-    );
-  }
-
-  if (!(iv instanceof Uint8Array)) {
-    throw new Error(
-      "File encryption IV must be a Uint8Array."
-    );
-  }
-
-  if (iv.length !== IV_LENGTH) {
-    throw new Error(
-      "File encryption IV must be exactly 12 bytes."
-    );
-  }
-
-  return {
-    encryptedData:
-      bytesToBase64(encryptedData),
-
-    iv: bytesToBase64(iv),
-  };
-}
-
-/**
- * Convert Base64 encrypted file data back into
- * Uint8Array values.
- */
-export function deserializeEncryptedFile({
-  encryptedData,
-  iv,
-}) {
-  if (
-    typeof encryptedData !== "string" ||
-    encryptedData.length === 0
-  ) {
-    throw new Error(
-      "Encrypted file data is required."
-    );
-  }
-
-  if (
-    typeof iv !== "string" ||
-    iv.length === 0
-  ) {
-    throw new Error(
-      "File encryption IV is required."
-    );
-  }
-
-  const encryptedBytes =
-    base64ToBytes(encryptedData);
-
-  const ivBytes =
-    base64ToBytes(iv);
-
-  if (ivBytes.length !== IV_LENGTH) {
-    throw new Error(
-      "Invalid file encryption IV."
-    );
-  }
-
-  return {
-    encryptedData: encryptedBytes,
-    iv: ivBytes,
-  };
 }
