@@ -5,6 +5,7 @@ import {
 import {
   encryptFile,
 } from "../crypto/fileCrypto.js";
+import { compressForStorage } from "../crypto/compression.js";
 
 import {
   encryptMetadata,
@@ -36,6 +37,7 @@ import {
  */
 export async function uploadEncryptedFile({
   file,
+  relativePath,
   authToken,
   masterKey,
   apiBaseUrl,
@@ -87,12 +89,15 @@ export async function uploadEncryptedFile({
    * A fresh random FEK is generated internally
    * by encryptFile().
    */
+  onProgress?.({ id: "compress" });
+  const { bytes: preparedBytes, compression } = await compressForStorage(file);
+
   onProgress?.({ id: "key" });
   const {
     encryptedData,
     fek,
     iv: fileIV,
-  } = await encryptFile(file);
+  } = await encryptFile(preparedBytes);
 
   /*
    * ----------------------------------------------------
@@ -110,6 +115,8 @@ export async function uploadEncryptedFile({
       file.type ||
       "application/octet-stream",
     size: file.size,
+    compression,
+    ...(relativePath && relativePath !== file.name ? { relativePath } : {}),
   };
 
   onProgress?.({ id: "metadata" });

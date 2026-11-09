@@ -62,7 +62,8 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [runtimeKeys, setRuntimeKeys] = useState(null);
 
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [activeUploadFile, setActiveUploadFile] = useState("");
   const [uploadError, setUploadError] = useState("");
   const [uploadResult, setUploadResult] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -193,17 +194,18 @@ function App() {
   }
 
   function handleFileSelect(event) {
-    const file = event.target.files?.[0] || null;
+    const files = Array.from(event.target.files || []);
+    const acceptedFiles = files.filter((file) => file.size <= MAX_FILE_SIZE);
+    const oversizedFiles = files.length - acceptedFiles.length;
     setUploadError("");
     setUploadResult(null);
     setUploadSteps([]);
-    if (file?.size > MAX_FILE_SIZE) {
-      setSelectedFile(null);
-      setUploadError("Choose a file no larger than 100 MB.");
-      event.target.value = "";
-      return;
+    setSelectedFiles(acceptedFiles);
+    if (oversizedFiles > 0) {
+      setUploadError(`${oversizedFiles} file${oversizedFiles === 1 ? "" : "s"} skipped. Each file must be no larger than 100 MB.`);
     }
-    setSelectedFile(file);
+    // Let users choose the same file or folder again after correcting an upload.
+    event.target.value = "";
   }
 
   async function handleFileUpload(event) {
@@ -211,27 +213,41 @@ function App() {
     setUploadError("");
     setUploadResult(null);
     setUploadSteps([]);
-    if (!selectedFile) return setUploadError("Please select a file first.");
+    if (selectedFiles.length === 0) return setUploadError("Please select at least one file first.");
     if (!authToken || !runtimeKeys?.masterKey) return setUploadError("Your session is unavailable. Sign in again.");
     setIsUploading(true);
+    const failedFiles = [];
+    let uploadedCount = 0;
     try {
-      const result = await uploadEncryptedFile({
-        file: selectedFile,
-        masterKey: runtimeKeys.masterKey,
-        authToken,
-        apiBaseUrl: API_BASE_URL,
-        onProgress: (step) => setUploadSteps((current) => [...current, step]),
-      });
-      setUploadResult(result);
-      addActivity("UPLOAD", "File uploaded", `${selectedFile.name} · ${formatBytes(selectedFile.size)}`);
-      setSelectedFile(null);
-      const input = document.getElementById("fileUpload");
-      if (input) input.value = "";
+      for (const [index, file] of selectedFiles.entries()) {
+        setActiveUploadFile(`${file.webkitRelativePath || file.name} (${index + 1} of ${selectedFiles.length})`);
+        setUploadSteps([]);
+        try {
+          await uploadEncryptedFile({
+            file,
+            relativePath: file.webkitRelativePath,
+            masterKey: runtimeKeys.masterKey,
+            authToken,
+            apiBaseUrl: API_BASE_URL,
+            onProgress: (step) => setUploadSteps((current) => [...current, step]),
+          });
+          uploadedCount += 1;
+          addActivity("UPLOAD", "File uploaded", `${file.name} · ${formatBytes(file.size)}`);
+        } catch (err) {
+          failedFiles.push({ file, message: err.message || "Upload failed." });
+          addActivity("UPLOAD", "Upload couldn't finish", `${file.name}: ${err.message || "Try uploading the file again."}`, "failed");
+        }
+      }
+      setUploadResult(uploadedCount > 0 ? { count: uploadedCount } : null);
+      setSelectedFiles(failedFiles.map(({ file }) => file));
+      if (failedFiles.length > 0) {
+        const details = failedFiles.slice(0, 3).map(({ file, message }) => `${file.webkitRelativePath || file.name}: ${message}`).join("; ");
+        const remaining = failedFiles.length > 3 ? `; and ${failedFiles.length - 3} more` : "";
+        setUploadError(`${failedFiles.length} file${failedFiles.length === 1 ? "" : "s"} could not be uploaded. ${details}${remaining}`);
+      }
       await loadFileList();
-    } catch (err) {
-      setUploadError(err.message || "Unable to upload your file. Try again.");
-      addActivity("UPLOAD", "Upload couldn't finish", err.message || "Try uploading the file again.", "failed");
     } finally {
+      setActiveUploadFile("");
       setIsUploading(false);
     }
   }
@@ -277,7 +293,8 @@ function App() {
     setLoginError("");
     setRegisterError("");
     setRegisterStatus("");
-    setSelectedFile(null);
+    setSelectedFiles([]);
+    setActiveUploadFile("");
     setUploadError("");
     setUploadResult(null);
     setFileList([]);
@@ -303,7 +320,7 @@ function App() {
             <Brand className="brand-lockup" />
             <div className="auth-hero">
               <span className="eyebrow">A little more peace of mind</span>
-              <h1>Your files.<br />Your people.<br /><em>Your privacy.</em></h1>
+              <h1>Secure<br />Zero Knowledge<br /><em>File Sharing System</em></h1>
               <p>Store securely. Share simply.</p>
               <VaultArtwork />
             </div>
@@ -316,6 +333,7 @@ function App() {
           </section>
           <section className="auth-form-panel">
             <Brand className="mobile-brand" />
+            <div className="mobile-auth-title"><h1>Secure Zero Knowledge File Sharing System</h1><p>Store securely. Share simply.</p></div>
             <div className="auth-form-wrap">
               <span className="auth-greeting"><Icon name={isLogin ? "lock" : "plus"} /> Your private workspace</span>
               <div className="form-heading">
@@ -389,7 +407,7 @@ function App() {
       <main className="main-content">
         <header className="content-topbar"><div><span className="breadcrumb">Workspace <span>/</span> {pageTitle}</span><h1 id="page-title" tabIndex={-1}>{pageTitle}</h1></div><div className="topbar-security"><Icon name="shield" /> Encrypted workspace</div></header>
         {page === "dashboard" && <Dashboard currentUser={currentUser} fileList={fileList} activities={recentActivities} backendOnline={backendOnline} onNavigate={go} />}
-        {page === "upload" && <UploadPage selectedFile={selectedFile} handleFileSelect={handleFileSelect} handleFileUpload={handleFileUpload} isUploading={isUploading} uploadError={uploadError} uploadResult={uploadResult} steps={uploadSteps} />}
+        {page === "upload" && <UploadPage selectedFiles={selectedFiles} handleFileSelect={handleFileSelect} handleFileUpload={handleFileUpload} isUploading={isUploading} activeUploadFile={activeUploadFile} uploadError={uploadError} uploadResult={uploadResult} steps={uploadSteps} />}
         {page === "files" && <FilesPage fileList={fileList} loadFileList={loadFileList} isLoadingFiles={isLoadingFiles} fileListError={fileListError} downloadError={downloadError} steps={downloadSteps} downloadingFileId={downloadingFileId} onDownload={handleFileDownload} onShare={() => go("sharing")} />}
         {page === "sharing" && <SharingPanel section="sharing" fileList={fileList} authToken={authToken} currentUser={currentUser} runtimeKeys={runtimeKeys} apiBaseUrl={API_BASE_URL} onActivity={addActivity} />}
         {page === "received" && <SharingPanel section="received" fileList={fileList} authToken={authToken} currentUser={currentUser} runtimeKeys={runtimeKeys} apiBaseUrl={API_BASE_URL} onActivity={addActivity} />}
@@ -402,7 +420,7 @@ function App() {
 }
 
 function Brand({ className }) {
-  return <div className={className}><img className="brand-symbol" src={`${import.meta.env.BASE_URL}brand-mark.svg`} alt="" width="46" height="46" /><div><strong>QSZKFSS</strong><small>Private file sharing</small></div></div>;
+  return <div className={className}><img className="brand-symbol" src={`${import.meta.env.BASE_URL}brand-mark.svg`} alt="" width="46" height="46" /><div><strong>SZKFSS</strong><small>Private file sharing</small></div></div>;
 }
 
 function Dashboard({ currentUser, fileList, activities, backendOnline, onNavigate }) {
@@ -453,7 +471,7 @@ function Stat({ icon, value, label, tone }) {
 }
 
 const UPLOAD_STAGES = [
-  ["key", "Prepare your file"], ["encrypt", "Encrypt the file"],
+  ["compress", "Compress when useful"], ["key", "Prepare your file"], ["encrypt", "Encrypt the file"],
   ["metadata", "Protect file details"], ["protect-meta", "Secure file details"],
   ["protect-fek", "Protect the file key"], ["package", "Prepare upload"],
   ["upload", "Upload encrypted file"], ["gridfs", "Save to your vault"],
@@ -462,30 +480,40 @@ const DOWNLOAD_STAGES = [
   ["auth", "Check access"], ["retrieve", "Get encrypted file"],
   ["fek", "Get the protected key"], ["decrypt", "Unlock the file"],
   ["metadata", "Get file details"], ["metadata-decrypt", "Read file details"],
+  ["decompress", "Restore the original file"],
   ["reconstruct", "Prepare download"],
 ];
 
-function UploadPage({ selectedFile, handleFileSelect, handleFileUpload, isUploading, uploadError, uploadResult, steps }) {
+function UploadPage({ selectedFiles, handleFileSelect, handleFileUpload, isUploading, activeUploadFile, uploadError, uploadResult, steps }) {
+  const selectedSize = selectedFiles.reduce((total, file) => total + file.size, 0);
+  const selectionLabel = selectedFiles.length === 1
+    ? selectedFiles[0].webkitRelativePath || selectedFiles[0].name
+    : `${selectedFiles.length} files selected`;
   return (
     <div className="page-body narrow-body">
-      <div className="page-intro"><span className="section-kicker"><Icon name="upload" /> Add something new</span><h2>A safe place for your files.</h2><p>Choose a file. We’ll encrypt it before uploading.</p></div>
+      <div className="page-intro"><span className="section-kicker"><Icon name="upload" /> Add something new</span><h2>A safe place for your files.</h2><p>Choose files or a folder. Folder contents are added as separate files.</p></div>
       <div className="operation-layout">
         <section className="section-card upload-card">
-          <div className={`drop-zone-large ${selectedFile ? "has-file" : ""}`}>
-            <input id="fileUpload" type="file" aria-label="Choose a file to upload" onChange={handleFileSelect} disabled={isUploading} />
-            <div className="upload-orb"><Icon name={selectedFile ? "file" : "upload"} /></div>
-            <strong>{selectedFile ? selectedFile.name : "What would you like to upload?"}</strong>
-            <span>{selectedFile ? formatBytes(selectedFile.size) : "Any file type · Up to 100 MB"}</span>
-            <label htmlFor="fileUpload">{selectedFile ? "Choose another file" : "Browse files"}<Icon name="plus" /></label>
+          <div className={`drop-zone-large ${selectedFiles.length > 0 ? "has-file" : ""}`}>
+            <input id="fileUpload" type="file" multiple aria-label="Choose files to upload" onChange={handleFileSelect} disabled={isUploading} />
+            <input id="folderUpload" type="file" multiple webkitdirectory="" directory="" aria-label="Choose a folder to upload" onChange={handleFileSelect} disabled={isUploading} />
+            <div className="upload-orb"><Icon name={selectedFiles.length > 0 ? "file" : "upload"} /></div>
+            <strong>{selectedFiles.length > 0 ? selectionLabel : "What would you like to upload?"}</strong>
+            <span>{selectedFiles.length > 0 ? `${formatBytes(selectedSize)} total · ${selectedFiles.length === 1 ? "1 file" : `${selectedFiles.length} files`}` : "Any file type · Up to 100 MB per file"}</span>
+            {selectedFiles.length > 1 && <small className="upload-selection-list">{selectedFiles.slice(0, 3).map((file) => file.webkitRelativePath || file.name).join(" · ")}{selectedFiles.length > 3 ? ` · +${selectedFiles.length - 3} more` : ""}</small>}
+            <div className="upload-picker-actions">
+              <label htmlFor="fileUpload">Browse files<Icon name="plus" /></label>
+              <label htmlFor="folderUpload">Choose folder<Icon name="folder" /></label>
+            </div>
           </div>
           {uploadError && <div className="form-alert danger" role="alert">{uploadError}</div>}
           <div className="upload-submit">
-            <div className="upload-assurance"><Icon name="lock" /><span>Encrypted before upload.</span></div>
-            <button className="primary-btn" onClick={handleFileUpload} disabled={isUploading || !selectedFile}>{isUploading ? "Uploading your file…" : "Upload file"}<Icon name="arrow" /></button>
+            <div className="upload-assurance"><Icon name="lock" /><span>Compressed when useful, then encrypted.</span></div>
+            <button className="primary-btn" onClick={handleFileUpload} disabled={isUploading || selectedFiles.length === 0}>{isUploading ? "Uploading your files…" : `Upload ${selectedFiles.length} ${selectedFiles.length === 1 ? "file" : "files"}`}<Icon name="arrow" /></button>
           </div>
-          {uploadResult && <div className="success-card" role="status"><Icon name="check" /><strong>All set! Your file is in your vault.</strong></div>}
+          {uploadResult && <div className="success-card" role="status"><Icon name="check" /><strong>{uploadResult.count === 1 ? "1 file is in your vault." : `${uploadResult.count} files are in your vault.`}</strong></div>}
         </section>
-        {!uploadResult && <OperationPanel title="Upload progress" subtitle={selectedFile?.name} stages={UPLOAD_STAGES} steps={steps} active={isUploading} />}
+        <OperationPanel title="Upload progress" subtitle={activeUploadFile || undefined} stages={UPLOAD_STAGES} steps={steps} active={isUploading} />
       </div>
     </div>
   );
@@ -588,7 +616,7 @@ function SecurityLine({ icon, title, value }) {
 function AboutPage() {
   return (
     <div className="page-body about-page">
-      <section className="about-hero"><div><span className="eyebrow">Meet QSZKFSS</span><h2>Private files.<br /><em>Simple sharing.</em></h2><p>A workspace that puts your privacy first.</p></div><VaultArtwork /></section>
+      <section className="about-hero"><div><span className="eyebrow">Meet SZKFSS</span><h2>Private files.<br /><em>Simple sharing.</em></h2><p>A workspace that puts your privacy first.</p></div><VaultArtwork /></section>
       <div className="about-grid">
         <AboutSection icon="upload" title="Make space." tone="indigo">Upload a file. It’s encrypted in your browser before it’s stored.</AboutSection>
         <AboutSection icon="share" title="Bring someone in." tone="teal">Share with another account using their username. You choose the access.</AboutSection>
@@ -596,7 +624,7 @@ function AboutPage() {
       </div>
       <details className="technical-details section-card">
         <summary><Icon name="info" /> About the project</summary>
-        <div className="technical-content"><p>Quantum Safe Zero Knowledge File Sharing System uses browser-side encryption and post-quantum key establishment for sharing.</p><div className="tech-grid"><span>React + Vite</span><span>Node.js + Express</span><span>MongoDB Atlas</span><span>Web Crypto API</span><span>AES-256-GCM</span><span>ML-KEM-768</span></div></div>
+      <div className="technical-content"><p>Secure Zero Knowledge File Sharing System uses browser-side encryption and post-quantum key establishment for sharing.</p><div className="tech-grid"><span>React + Vite</span><span>Node.js + Express</span><span>MongoDB Atlas</span><span>Web Crypto API</span><span>AES-256-GCM</span><span>ML-KEM-768</span></div></div>
       </details>
     </div>
   );

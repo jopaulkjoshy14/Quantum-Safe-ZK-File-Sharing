@@ -30,6 +30,7 @@ const RECEIVE_STAGES = [
   ["unwrap", "Unlock the file key"],
   ["decrypt", "Decrypt the file"],
   ["metadata", "Read file details"],
+  ["decompress", "Restore the original file"],
   ["reconstruct", "Prepare download"],
 ];
 

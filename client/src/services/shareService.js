@@ -19,6 +19,7 @@ import {
 } from "../crypto/metadataCrypto.js";
 import { decryptFile } from "../crypto/fileCrypto.js";
 import { decryptMetadata } from "../crypto/metadataCrypto.js";
+import { decompressAfterDownload } from "../crypto/compression.js";
 
 async function parseResponse(response, fallbackMessage) {
   let data;
@@ -366,7 +367,7 @@ export async function downloadAndDecryptSharedFile({
     );
 
   onProgress?.({ id: "decrypt" });
-  const plaintext = await decryptFile(
+  const decryptedBytes = await decryptFile(
     base64ToBytes(file.encryptedData),
     fek,
     base64ToBytes(file.fileIV)
@@ -389,6 +390,13 @@ export async function downloadAndDecryptSharedFile({
   ) {
     throw new Error("Recovered shared-file metadata is invalid.");
   }
+
+  onProgress?.({ id: "decompress" });
+  const plaintext = await decompressAfterDownload(
+    decryptedBytes,
+    metadata.compression,
+    metadata.size
+  );
 
   if (plaintext.length !== metadata.size) {
     throw new Error(

@@ -53,7 +53,7 @@ async function importFileEncryptionKey(fek) {
 }
 
 /**
- * Encrypt a File object using a fresh FEK.
+ * Encrypt file bytes using a fresh FEK.
  *
  * File
  *   ↓
@@ -71,10 +71,13 @@ async function importFileEncryptionKey(fek) {
  * during this operation.
  */
 export async function encryptFile(file) {
-  if (!(file instanceof File)) {
-    throw new Error(
-      "A valid File object is required."
-    );
+  let plaintext;
+  if (file instanceof Uint8Array) {
+    plaintext = file;
+  } else if (file instanceof File) {
+    plaintext = new Uint8Array(await file.arrayBuffer());
+  } else {
+    throw new Error("A File or Uint8Array is required.");
   }
 
   const fek = generateFileEncryptionKey();
@@ -84,8 +87,6 @@ export async function encryptFile(file) {
   );
 
   const iv = generateIV();
-
-  const plaintext = await file.arrayBuffer();
 
   const ciphertext =
     await crypto.subtle.encrypt(

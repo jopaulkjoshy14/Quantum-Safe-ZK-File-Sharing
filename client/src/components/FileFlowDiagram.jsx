@@ -6,9 +6,10 @@ const JOURNEYS = {
     label: "Upload",
     icon: "upload",
     title: "From your device to your vault",
-    note: "Your file and its details are encrypted before they leave your browser.",
+    note: "Files are compressed in your browser when useful, then encrypted before they leave.",
     steps: [
-      { icon: "file", title: "Choose a file", location: "Your browser", tone: "indigo" },
+      { icon: "file", title: "Choose files or a folder", location: "Your browser", tone: "indigo" },
+      { icon: "file", title: "Compress when useful", location: "Your browser", tone: "teal" },
       { icon: "lock", title: "Encrypt locally", location: "Your browser", tone: "teal" },
       { icon: "upload", title: "Send encrypted data", location: "Browser → server", tone: "sky" },
       { icon: "cloud", title: "Store in your vault", location: "Encrypted storage", tone: "indigo" },
@@ -30,12 +31,12 @@ const JOURNEYS = {
     label: "Download",
     icon: "download",
     title: "Bring a file back to your device",
-    note: "Your browser decrypts the file and restores its original name before saving.",
+    note: "Your browser decrypts the file, decompresses it when needed, and restores its original name.",
     steps: [
       { icon: "download", title: "Request a file", location: "Your browser", tone: "indigo" },
       { icon: "shield", title: "Check your access", location: "Server", tone: "sky" },
       { icon: "cloud", title: "Return encrypted data", location: "Server → browser", tone: "sky" },
-      { icon: "folder", title: "Decrypt and save", location: "Your browser", tone: "teal" },
+      { icon: "folder", title: "Restore and save", location: "Your browser", tone: "teal" },
     ],
   },
 };

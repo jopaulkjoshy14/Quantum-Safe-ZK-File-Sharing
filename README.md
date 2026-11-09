@@ -1,4 +1,4 @@
-# Quantum Safe Zero Knowledge File Sharing System
+# Secure Zero Knowledge File Sharing System
 
 A cloud-based, client-side encrypted file-sharing system using **AES-256-GCM** for file protection and **ML-KEM-768** for post-quantum secure key establishment during sharing.
 
@@ -30,6 +30,8 @@ A cloud-based, client-side encrypted file-sharing system using **AES-256-GCM** f
 - Authentication token and cryptographic keys kept in runtime memory only
 
 ### Encrypted file storage
+- Select multiple files or a folder; folder contents upload as separate files.
+- Gzip-compress files in the browser when it reduces their size, before encryption.
 - Fresh random FEK for every file
 - AES-256-GCM file encryption before upload
 - Separate random metadata encryption key

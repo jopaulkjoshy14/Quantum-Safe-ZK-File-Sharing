@@ -14,6 +14,7 @@ import {
 import {
   unwrapOwnerFEK,
 } from "../crypto/keyWrapping.js";
+import { decompressAfterDownload } from "../crypto/compression.js";
 
 /**
  * Retrieve and decrypt an encrypted file.
@@ -308,7 +309,7 @@ export async function downloadAndDecryptFile({
    */
   onProgress?.({ id: "decrypt" });
 
-  const plaintext =
+  const decryptedBytes =
     await decryptFile(
       encryptedData,
       fek,
@@ -394,6 +395,13 @@ export async function downloadAndDecryptFile({
     );
   }
 
+  onProgress?.({ id: "decompress" });
+  const plaintext = await decompressAfterDownload(
+    decryptedBytes,
+    metadata.compression,
+    metadata.size
+  );
+
   /*
    * ----------------------------------------------------
    * Return decrypted package
@@ -421,6 +429,8 @@ export async function downloadAndDecryptFile({
 
       size:
         metadata.size,
+      relativePath:
+        typeof metadata.relativePath === "string" ? metadata.relativePath : undefined,
     },
 
     keyVersion:
